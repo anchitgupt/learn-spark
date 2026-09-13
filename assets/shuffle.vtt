@@ -1,0 +1,13 @@
+WEBVTT
+
+00:00.000 --> 00:03.000
+Six rows are split across three input partitions.
+Each row has a city key.
+
+00:03.000 --> 00:08.000
+Rows move to the illustrated partition for their city.
+Matching keys come together.
+
+00:08.000 --> 00:12.000
+Pune: 3. Delhi: 2. Mumbai: 1.
+Spark may partially aggregate before this shuffle.

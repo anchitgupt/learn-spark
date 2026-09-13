@@ -1,0 +1,74 @@
+[
+  {
+    "id": "practice-what-is-spark",
+    "topic": "what-is-spark",
+    "type": "Scenario",
+    "question": "Would you use Spark to process a 20 MB CSV every morning?",
+    "answer": "First check existing infrastructure, transformations, and latency requirements. A local script or SQL engine may be enough. Spark can still make sense if the pipeline already runs there, but distributed overhead needs a reason.",
+    "followup": "What assumptions would change your answer?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-architecture",
+    "topic": "architecture",
+    "type": "Scenario",
+    "question": "The driver crashes after collect(), but executors have free memory. Why?",
+    "answer": "collect() returns all rows to the driver. Diagnose the driver result size and heap rather than only executor capacity. Keep processing distributed, write results to storage, or inspect a bounded sample.",
+    "followup": "Which Spark UI metric or plan operator would you inspect?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-dataframes",
+    "topic": "dataframes",
+    "type": "Concept",
+    "question": "Is Spark SQL slower than the DataFrame API?",
+    "answer": "Not inherently. Both use Spark SQL’s engine. Compare the optimized and physical plans for equivalent expressions, plus runtime metrics and UDF use.",
+    "followup": "What assumptions would change your answer?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-lazy-evaluation",
+    "topic": "lazy-evaluation",
+    "type": "Concept",
+    "question": "I wrote five transformations. How many jobs did I create?",
+    "answer": "Transformation count alone cannot tell you. Ask which actions run, inspect the executed plan, and confirm in the Spark UI. Lazy transformations primarily build a plan.",
+    "followup": "Which Spark UI metric or plan operator would you inspect?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-jobs-stages-tasks",
+    "topic": "jobs-stages-tasks",
+    "type": "Concept",
+    "question": "You have 200 tasks and 20 available slots. Will the stage take exactly ten task durations?",
+    "answer": "Ten waves is only a lower-bound model for uniform tasks with no overhead. Skew, scheduling, I/O, retries, and contention affect actual completion time.",
+    "followup": "What assumptions would change your answer?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-partitions-shuffles",
+    "topic": "partitions-shuffles",
+    "type": "Scenario",
+    "question": "Why did coalesce(1) make my write slow?",
+    "answer": "It funnels output through one partition and can reduce upstream parallelism. Check file requirements; prefer a useful number of output partitions. A shuffle before the final write trades extra redistribution for parallel upstream work.",
+    "followup": "Which Spark UI metric or plan operator would you inspect?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-joins-skew",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "question": "A join finishes 199 tasks quickly and one task takes 20 minutes. What do you inspect?",
+    "answer": "Compare the slow task’s input and shuffle size, spill, and execution time. Check hot or null keys and join multiplicity. Consider adaptive skew handling where applicable; do not assume that adding executors splits a single hot partition.",
+    "followup": "What assumptions would change your answer?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-cache-recovery",
+    "topic": "cache-recovery",
+    "type": "Concept",
+    "question": "Is caching every DataFrame a good way to speed up my pipeline?",
+    "answer": "No. Identify repeated expensive computation, memory capacity, and reuse lifetime. Caching one-use intermediates can add overhead and pressure. Measure, inspect storage, and unpersist deliberately.",
+    "followup": "Which Spark UI metric or plan operator would you inspect?",
+    "source": "Authored practice question; not a reported interview question."
+  }
+]

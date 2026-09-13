@@ -1,0 +1,326 @@
+[
+  {
+    "slug": "what-is-spark",
+    "title": "What is Apache Spark?",
+    "dek": "Start with the problem Spark solves, before the API you write.",
+    "minutes": 5,
+    "idea": "Spark is a distributed compute engine. Your data is divided into partitions, and work on those partitions can run in parallel.",
+    "sections": [
+      {
+        "title": "Why distributed processing?",
+        "body": "<p>Imagine computing daily revenue from a year of transaction events. On a laptop, the data may exceed available memory or take longer than your processing window. A distributed engine coordinates work across machines. That coordination has a cost: a small CSV may be simpler and faster to process with pandas or a database.</p><p>The useful interview question is: what limits this workload—data size, CPU, I/O, or latency? “Big data” alone is not a sizing decision.</p>"
+      },
+      {
+        "title": "Compute is different from storage",
+        "body": "<p>Spark reads data, computes results, and writes them to a destination. Your source might be object storage or a database; Spark itself is not your permanent database. Storage, table formats, and compute are separate choices.</p>"
+      },
+      {
+        "title": "A small example, a useful habit",
+        "body": "<p>Start with a tiny dataset whose result you can calculate yourself. Here, two successful payments total ₹1,200. The same expression can later operate over partitioned production data. This example assumes a <code>spark</code> session; the next lesson explains its architecture.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\npayments = spark.createDataFrame(\n    [(\"success\", 500), (\"failed\", 200), (\"success\", 700)],\n    \"status string, amount long\"\n)\nrevenue = (payments.filter(F.col(\"status\") == \"success\")\n           .agg(F.sum(\"amount\").alias(\"revenue\")))\nrevenue.show()",
+    "output": "revenue: 1200",
+    "pitfall": "Spark does not require every dataset to fit in RAM. Distributed processing is also not automatically faster for small workloads.",
+    "question": "Would you use Spark to process a 20 MB CSV every morning?",
+    "answer": "First check existing infrastructure, transformations, and latency requirements. A local script or SQL engine may be enough. Spark can still make sense if the pipeline already runs there, but distributed overhead needs a reason.",
+    "sources": [
+      {
+        "title": "Spark overview",
+        "url": "https://spark.apache.org/docs/3.5.7/index.html"
+      },
+      {
+        "title": "Structured data processing",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-programming-guide.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "architecture",
+    "title": "Driver, executors & the cluster",
+    "dek": "Know who plans the work and who actually runs it.",
+    "minutes": 6,
+    "idea": "The driver coordinates your application. Executors run tasks and hold application data. The cluster manager allocates resources.",
+    "sections": [
+      {
+        "title": "Three roles to keep separate",
+        "body": "<p>The <strong>driver</strong> plans and schedules work. The <strong>executors</strong> are application processes that run tasks. A <strong>cluster manager</strong>, such as YARN, Kubernetes, or Spark standalone, provides resources. A worker machine is not the same thing as an executor process.</p>"
+      },
+      {
+        "title": "Where does your Python run?",
+        "body": "<p>In classic PySpark, your Python program communicates with Spark’s JVM machinery. Python UDFs can involve Python worker processes on executors. Built-in DataFrame expressions generally execute through Spark’s engine; writing Python syntax does not mean every row runs through Python.</p>"
+      },
+      {
+        "title": "Think about the destination",
+        "body": "<p>A distributed operation can finish successfully and still overwhelm the driver if you bring back too much data. When debugging, inspect a bounded sample and the Spark UI. Ask which process ran out of memory before suggesting more executor memory.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import SparkSession\nspark = (SparkSession.builder\n         .master(\"local[2]\")  # two local task threads, not two executors\n         .appName(\"spark-fieldnotes\")\n         .getOrCreate())\nspark.range(10).show(5)",
+    "output": "Shows IDs 0–4, followed by a notice that only five rows are shown.",
+    "pitfall": "local[2] is a local learning setup, not a two-machine cluster. In production, deployment configuration determines where the driver runs.",
+    "question": "The driver crashes after collect(), but executors have free memory. Why?",
+    "answer": "collect() returns all rows to the driver. Diagnose the driver result size and heap rather than only executor capacity. Keep processing distributed, write results to storage, or inspect a bounded sample.",
+    "sources": [
+      {
+        "title": "Application components and deployment",
+        "url": "https://spark.apache.org/docs/3.5.7/cluster-overview.html"
+      },
+      {
+        "title": "PySpark architecture",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/index.html"
+      },
+      {
+        "title": "DataFrame.collect",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.collect.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "dataframes",
+    "title": "RDDs, DataFrames & Spark SQL",
+    "dek": "Choose the right abstraction for a data engineering pipeline.",
+    "minutes": 5,
+    "idea": "For structured ETL, start with DataFrames or SQL: the schema and expressions give Spark information it can optimize.",
+    "sections": [
+      {
+        "title": "A schema is part of the contract",
+        "body": "<p>A DataFrame is organized into named, typed columns. Define the expected schema when ingestion needs to be predictable. Check nullability, malformed records, and type conversions explicitly instead of assuming that successful reading means clean data.</p>"
+      },
+      {
+        "title": "Where RDDs fit",
+        "body": "<p>RDDs expose lower-level distributed collections. They are useful for custom processing that does not fit structured expressions. Python DataFrames do not provide the Scala/Java typed Dataset API. In an interview, separate the concepts from language-specific API names.</p>"
+      },
+      {
+        "title": "SQL or DataFrame?",
+        "body": "<p>These are two ways of expressing structured computation through Spark SQL. Choose the form your team can maintain, then inspect the plan. Equivalent logic may produce equivalent plans; switching syntax alone is not a performance strategy.</p>"
+      }
+    ],
+    "code": "orders = spark.createDataFrame(\n    [(\"Pune\", 500), (\"Delhi\", 700), (\"Pune\", 300)],\n    \"city string, amount long\"\n)\norders.createOrReplaceTempView(\"orders\")\nspark.sql(\"\"\"\n    SELECT city, SUM(amount) AS revenue\n    FROM orders GROUP BY city ORDER BY city\n\"\"\").show()",
+    "output": "Delhi: 700 · Pune: 800",
+    "pitfall": "A DataFrame has no guaranteed row order unless you request ordering. Do not rely on the display order of a small test.",
+    "question": "Is Spark SQL slower than the DataFrame API?",
+    "answer": "Not inherently. Both use Spark SQL’s engine. Compare the optimized and physical plans for equivalent expressions, plus runtime metrics and UDF use.",
+    "sources": [
+      {
+        "title": "DataFrames, SQL, and Dataset language support",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-programming-guide.html"
+      },
+      {
+        "title": "Schemas and temporary views",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-getting-started.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "lazy-evaluation",
+    "title": "Lazy evaluation & actions",
+    "dek": "Understand why a line of code is not a job.",
+    "minutes": 6,
+    "idea": "Transformations describe a computation. An action asks Spark to produce a result, triggering the work it needs.",
+    "sections": [
+      {
+        "title": "Build a plan, then execute",
+        "body": "<p>Think of a transaction pipeline as a recipe: read, filter, select, aggregate. Describing a recipe is different from cooking it. Deferring execution lets Spark inspect the requested computation before running it.</p>"
+      },
+      {
+        "title": "Predict before you run",
+        "body": "<p>In this example, building <code>even</code> describes a filter. <code>count()</code> asks for a result. A second action can require work again unless an appropriate intermediate result has been persisted and materialized.</p>"
+      },
+      {
+        "title": "Use the plan as evidence",
+        "body": "<p><code>explain(\"formatted\")</code> helps you inspect execution operators without collecting the dataset. Distinguish planning from execution, and avoid claiming that every API call is free: schema inference and metadata operations can do work too.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\nnumbers = spark.range(0, 10)\neven = numbers.filter(F.col(\"id\") % 2 == 0)\neven.explain(\"formatted\")\nprint(even.count())",
+    "output": "count() returns 5. The plan contains a range and a filter.",
+    "pitfall": "Do not say “one action always equals exactly one Spark job.” SQL execution, subqueries, and adaptive execution can make that relationship more involved.",
+    "question": "I wrote five transformations. How many jobs did I create?",
+    "answer": "Transformation count alone cannot tell you. Ask which actions run, inspect the executed plan, and confirm in the Spark UI. Lazy transformations primarily build a plan.",
+    "sources": [
+      {
+        "title": "Transformations and actions",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#rdd-operations"
+      },
+      {
+        "title": "Explain API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.explain.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "jobs-stages-tasks",
+    "title": "Jobs, stages & tasks",
+    "dek": "Read the execution hierarchy without memorizing misleading formulas.",
+    "minutes": 6,
+    "idea": "An application runs jobs. Jobs are split into stages, and a stage has tasks that process its partitions.",
+    "sections": [
+      {
+        "title": "Work at three scales",
+        "body": "<p>A job is work initiated to obtain a result. A stage groups tasks that can run without crossing a shuffle dependency. Within a stage, tasks operate on partitions. Task attempts can be retried, so attempts and distinct tasks are different counts.</p>"
+      },
+      {
+        "title": "Partitions are not CPU cores",
+        "body": "<p>In the simplified case of 12 ready tasks and four available task slots, execution needs at least three waves. That assumes one slot per task, similar task lengths, and no failures. Twelve partitions do not imply twelve machines.</p>"
+      },
+      {
+        "title": "Read the UI from the slow end",
+        "body": "<p>Find the slow stage, compare task durations, and inspect input sizes and shuffle metrics. One unusually slow task suggests a different investigation from every task being slow. Use evidence to distinguish imbalance from insufficient overall resources.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\nevents = spark.range(0, 120, 1, 4)\ncounts = (events.withColumn(\"bucket\", F.col(\"id\") % 3)\n          .groupBy(\"bucket\").count())\ncounts.explain(\"formatted\")\ncounts.orderBy(\"bucket\").show()",
+    "output": "Buckets 0, 1, and 2 each have count 40. Exact job/stage counts depend on the executed plan and configuration.",
+    "pitfall": "A partition is a unit of data; a task is a unit of execution. AQE can change the number of downstream shuffle partitions.",
+    "question": "You have 200 tasks and 20 available slots. Will the stage take exactly ten task durations?",
+    "answer": "Ten waves is only a lower-bound model for uniform tasks with no overhead. Skew, scheduling, I/O, retries, and contention affect actual completion time.",
+    "sources": [
+      {
+        "title": "Execution glossary",
+        "url": "https://spark.apache.org/docs/3.5.7/cluster-overview.html#glossary"
+      },
+      {
+        "title": "Web UI",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Adaptive execution",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#adaptive-query-execution"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "partitions-shuffles",
+    "title": "Partitions & shuffles",
+    "dek": "Follow the data when work needs to cross partition boundaries.",
+    "minutes": 7,
+    "idea": "A shuffle redistributes records across partitions. It is often necessary when records sharing a key must meet.",
+    "sections": [
+      {
+        "title": "Local work versus redistribution",
+        "body": "<p>A filter can evaluate rows where they already are. A grouped aggregation needs values for each key brought together. Spark can sometimes reduce data locally first, but the remaining partial results still need appropriate distribution.</p>"
+      },
+      {
+        "title": "Repartition or coalesce?",
+        "body": "<p><code>repartition</code> redistributes data through a shuffle. <code>coalesce</code> can reduce the partition count without a shuffle, but a drastic reduction can constrain parallelism. Neither operation is a universal fix for output file sizing.</p>"
+      },
+      {
+        "title": "Partitioning has several meanings",
+        "body": "<p>An execution partition is not the same as a storage directory such as <code>date=2026-09-13</code>. Input files, execution partitions, shuffle partitions, and output files are related through execution and writer behavior; they are not interchangeable counts.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\nrows = spark.range(0, 12, 1, 3)\nkeyed = rows.withColumn(\"key\", F.col(\"id\") % 2)\nredistributed = keyed.repartition(4, \"key\")\nredistributed.explain(\"formatted\")",
+    "output": "Look for an Exchange with hash partitioning on key. Four requested partitions do not guarantee four nonempty partitions.",
+    "pitfall": "More partitions can improve parallelism, but too many tiny tasks add overhead. A hot key can remain hot after repartitioning by that same key.",
+    "question": "Why did coalesce(1) make my write slow?",
+    "answer": "It funnels output through one partition and can reduce upstream parallelism. Check file requirements; prefer a useful number of output partitions. A shuffle before the final write trades extra redistribution for parallel upstream work.",
+    "sources": [
+      {
+        "title": "Shuffle fundamentals",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#shuffle-operations"
+      },
+      {
+        "title": "Coalesce behavior",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.coalesce.html"
+      },
+      {
+        "title": "Repartition API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.repartition.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "joins-skew",
+    "title": "Joins & data skew",
+    "dek": "Reason about data shape before reaching for a join hint.",
+    "minutes": 7,
+    "idea": "Choose a join strategy using data sizes, key distribution, and the actual execution plan—not table names.",
+    "sections": [
+      {
+        "title": "Start with correctness",
+        "body": "<p>Identify the join keys, join type, null behavior, and expected row count. Duplicate keys can multiply output rows. A fast join that changes business grain is still wrong.</p>"
+      },
+      {
+        "title": "Small side, large side",
+        "body": "<p>A broadcast join distributes a build-side relation to executors. It can avoid shuffling the large side for a suitable join, but the broadcast must fit safely. Filter and project the small relation before assessing size. Hints are requests with strategy limitations, not guarantees.</p>"
+      },
+      {
+        "title": "When one key dominates",
+        "body": "<p>If most events share one customer key, hashing that key still sends its records together. Diagnose task and partition imbalance. Possible responses include isolating hot keys, pre-aggregation where valid, or carefully designed salting. Check correctness when combining salted results.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\nfacts = spark.createDataFrame([(1, 100), (2, 200)],\n                              \"customer_id long, amount long\")\ncustomers = spark.createDataFrame([(1, \"Pune\"), (2, \"Delhi\")],\n                                  \"customer_id long, city string\")\njoined = facts.join(F.broadcast(customers), \"customer_id\")\njoined.explain(\"formatted\")\njoined.orderBy(\"customer_id\").show()",
+    "output": "Two matching rows: customer 1 / 100 / Pune and customer 2 / 200 / Delhi.",
+    "pitfall": "Do not broadcast a relation simply because it is smaller than the other table. Its expanded size and executor memory pressure matter.",
+    "question": "A join finishes 199 tasks quickly and one task takes 20 minutes. What do you inspect?",
+    "answer": "Compare the slow task’s input and shuffle size, spill, and execution time. Check hot or null keys and join multiplicity. Consider adaptive skew handling where applicable; do not assume that adding executors splits a single hot partition.",
+    "sources": [
+      {
+        "title": "Join strategies and AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Join semantics",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-join.html"
+      },
+      {
+        "title": "Null semantics",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-null-semantics.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "cache-recovery",
+    "title": "Caching & fault tolerance",
+    "dek": "Reuse the right work, and know what Spark can recompute.",
+    "minutes": 6,
+    "idea": "Caching is a reuse decision. Recovery relies on the ability to recompute missing work from available inputs.",
+    "sections": [
+      {
+        "title": "Cache a reusable boundary",
+        "body": "<p>If several actions reuse an expensive filtered dataset, persisting that intermediate result may help. Materialization costs time and storage. Compare total runtime, check the Storage tab, and release data when its reuse window ends.</p>"
+      },
+      {
+        "title": "Be precise about defaults",
+        "body": "<p>In PySpark 3.5.7, DataFrame <code>cache()</code> uses <code>MEMORY_AND_DISK_DESER</code>. Do not transfer this default to every RDD API or version. Storage settings and eviction determine what remains available for reuse.</p>"
+      },
+      {
+        "title": "Recovery has boundaries",
+        "body": "<p>Spark can recompute lost RDD partitions using lineage. That requires usable upstream inputs; it does not promise that every external side effect runs exactly once. Retry-aware writes, deterministic logic, and appropriate transactional sinks are separate design decisions.</p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\nreusable = spark.range(100).filter(F.col(\"id\") % 2 == 0).cache()\ntry:\n    print(reusable.count())  # materializes this small example\n    reusable.agg(F.sum(\"id\").alias(\"total\")).show()\nfinally:\n    reusable.unpersist()",
+    "output": "count: 50 · total: 2450",
+    "pitfall": "Calling cache() alone does not eagerly materialize the dataset. Cached data can also be evicted or lost.",
+    "question": "Is caching every DataFrame a good way to speed up my pipeline?",
+    "answer": "No. Identify repeated expensive computation, memory capacity, and reuse lifetime. Caching one-use intermediates can add overhead and pressure. Measure, inspect storage, and unpersist deliberately.",
+    "sources": [
+      {
+        "title": "DataFrame cache storage level",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.cache.html"
+      },
+      {
+        "title": "RDD persistence and recovery",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#rdd-persistence"
+      },
+      {
+        "title": "Memory tuning",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-13",
+    "version": "Apache Spark 3.5.7"
+  }
+]
