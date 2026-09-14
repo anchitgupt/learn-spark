@@ -15,9 +15,10 @@ Open http://127.0.0.1:4173. Alternatively, `npm run dev` builds and serves the s
 
 ## What's included
 
-- Nine linked lessons: eight fundamentals plus a complete execution-flow capstone connecting startup, planning, scheduling, shuffles, recovery, and output.
+- Ten linked lessons: eight fundamentals, the complete execution-flow capstone, and a prediction practice lesson.
 - Original small PySpark examples, expected results, pitfalls, and interview explanations.
-- Twelve interview prompts: one question reported by Anchit and eleven authored practice prompts, clearly labeled with their provenance.
+- Fifteen interview prompts: one question reported by Anchit and fourteen authored practice prompts, clearly labeled with their provenance.
+- Three prediction exercises: filter/count, groupBy/write, and broadcast join/aggregate. Each has native answer reveals, a task-flow diagram, plan/UI checks, a spoken answer, and a follow-up. A separate AQE comparison explores how the baseline can change.
 - A six-phase interactive execution walkthrough with a full static reading fallback and a diagram separating resource allocation, task dispatch, and data movement.
 - SVG architecture and partition diagrams; a canvas shuffle/filter walkthrough; an original 12-second H.264 explainer with captions and a transcript.
 - Search, completion tracking, and a personal interview notebook with add/edit/delete and JSON import/export.
@@ -31,6 +32,7 @@ Edit `content/lessons.json` for the published curriculum. Each lesson has a stab
 - `code` is a plain-text PySpark snippet; the generator escapes it automatically.
 - Add source title/URL pairs, the Spark runtime version, and the actual review date. Do not advance the review date without checking the explanation.
 - Overview, sidebar, question, and progress totals are derived from content. Preserve existing slugs so links and saved notes remain valid. Sections may specify stable `id` values; sources may specify `id` values for inline source references.
+- Prediction exercises live in `content/predictions.json` and render through `scripts/predictions.py`. The lesson references their stable IDs in `exercises`; each record supplies code, prompts, reasoning, a flow, expected output, verification code/steps, spoken answer, follow-up, and source IDs from the lesson. Search links directly to each exercise. Keep setup and configuration assumptions consistent with the lesson.
 - The capstone phase summaries live in `content/execution-phases.json` and render through `scripts/flow.py`. Each phase links to a full lesson section.
 - Question `origin` is `reported` only for a user-reported interview question; otherwise use `practice`. Adding authored follow-ups does not make them reported questions.
 - `content/questions.json` holds published practice questions. Each question references a lesson slug and has a stable ID, type, question, answer, follow-up, and provenance.
@@ -40,7 +42,7 @@ For a new interview question, use **My notebook**. Saved questions are browser-l
 
 ## Verification policy
 
-The initial content uses **Apache Spark 3.5.7 as an explicit reference baseline**, not as a claim about the newest release. Each lesson records its review date. The original fundamentals were checked on 2026-09-13; the complete-flow lesson was checked against official documentation and versioned Apache Spark source on 2026-09-14. Other Spark releases, Spark Connect, and managed distributions can behave differently.
+The initial content uses **Apache Spark 3.5.7 as an explicit reference baseline**, not as a claim about the newest release. Each lesson records its review date. The original fundamentals were checked on 2026-09-13; the complete-flow and prediction lessons were checked against official documentation and versioned Apache Spark source on 2026-09-14. Other Spark releases, Spark Connect, and managed distributions can behave differently.
 
 PySpark examples are syntax-checked, with expected results reasoned from their small inputs. They have **not been executed in a Spark runtime** on this machine. Before promoting new code as runtime-verified, run it on the stated version and record the observed result. The lab and video are conceptual models, not a real scheduler or a performance benchmark.
 
@@ -97,7 +99,7 @@ npm run build
 npm run check
 ```
 
-`check.py` validates local links, anchors, image alt attributes, one H1 per page, source metadata, unique content IDs, question-topic relationships, search destinations, and Python example syntax. It does not execute Spark or fetch remote links.
+`check.py` validates local links, anchors, image alt attributes, one H1 per page, source metadata, unique content IDs, question-topic relationships, search destinations, exercise references and source anchors, and Python example syntax (including every setup/exercise/verification block in the prediction lesson). It does not execute Spark or fetch remote links.
 
 Browser review covers search, filters, disclosure controls, note CRUD and persistence, import/export and malicious-input handling, completion, video playback, the lab, phone navigation, blocked storage, and JavaScript-disabled reading. Screenshots and test exports live in ignored `output/playwright/`.
 

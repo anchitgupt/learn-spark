@@ -1,0 +1,148 @@
+[
+  {
+    "id": "filter-count",
+    "title": "Filter → count",
+    "intro": "A filter keeps rows in place. Does that make the whole query shuffle-free?",
+    "code": "filtered = orders.filter(F.col(\"amount\") > 100)\nrows = filtered.count()\nprint(rows)",
+    "prompts": [
+      "Which line requests distributed execution?",
+      "Does the filter change the four input partitions? Does the count need a different distribution?",
+      "How many tasks would you expect on each side of that boundary under the baseline?",
+      "What is the result, and how much data returns to the driver?"
+    ],
+    "flow": [
+      {
+        "label": "4 input tasks",
+        "detail": "Generate IDs, evaluate the filter, compute partial counts."
+      },
+      {
+        "label": "Shuffle to one partition",
+        "detail": "Exchange SinglePartition brings partial counts together."
+      },
+      {
+        "label": "1 final task",
+        "detail": "Combine partial counts; return one count to the driver."
+      }
+    ],
+    "reasoning": [
+      "The filter constructs a DataFrame expression; count() requests a result. For this Range input, generating and filtering rows is deferred until execution. Python assignments and constructing expressions still run on the driver.",
+      "IDs 3 through 11 survive. Filtering does not coalesce away an empty input partition: the task for IDs 0–2 still evaluates its input. The filter itself does not redistribute rows. The global count, however, combines partial counts using a SinglePartition exchange in the expected plan.",
+      "With four Range partitions, AQE off, no reused work, and no retries, predict four upstream tasks and one downstream task. This is a two-stage reference shape for this count, not a rule that every count always has two stages. Tasks can run in waves if fewer slots are available. Only a count is returned; the driver does not need all nine surviving rows."
+    ],
+    "output": "9. The input partitions contribute counts 0, 3, 3, and 3 before the final combination.",
+    "verify_code": "# Preview an equivalent global-count query, not just the filter.\nfiltered.agg(F.count(\"*\").alias(\"rows\")).explain(\"formatted\")\n# The earlier filtered.count() is the action to inspect in the UI.",
+    "evidence": [
+      "Look for partial and final count aggregates separated by Exchange SinglePartition. filtered.explain() alone omits the count operation.",
+      "In the SQL tab, open the count execution and follow its associated jobs to the Stages tab. Compare the four upstream tasks with the single final task; count attempts separately if retries occurred.",
+      "Check the filter output-row metric and exchange records where exposed. Expect nine retained rows overall, but partial counts rather than all input rows at the exchange."
+    ],
+    "spoken": "The filter is local to each input partition, but the final count is global. Under this four-partition baseline I expect four tasks to filter and partially count, then a single downstream task to combine those counts. The answer is nine. I would verify the count query, rather than only explaining the filtered DataFrame.",
+    "followup": "If the filter removes every row, do the input tasks disappear?",
+    "followup_answer": "For a predicate that Spark must evaluate against this input, tasks still inspect the partitions and the final count is zero. Empty output is not proof of zero work. A condition proved false during optimization, such as a literal false filter, can instead simplify the plan before scanning. Inspect the actual plan before assigning task counts.",
+    "sources": [
+      "count-api",
+      "count-source",
+      "aggregate-planning",
+      "explain",
+      "spark-ui"
+    ]
+  },
+  {
+    "id": "groupby-write",
+    "title": "GroupBy → write",
+    "intro": "Three keys produce three totals. Predict the shuffle, the writer tasks, and where those totals go.",
+    "code": "totals = (\n    orders.filter(F.col(\"amount\") > 100)\n    .groupBy(\"bucket\")\n    .agg(F.sum(\"amount\").alias(\"total\"))\n)\nwriter = totals.write.mode(\"errorifexists\")\nwriter.parquet(output_path)",
+    "prompts": [
+      "Does creating writer execute the query, or does parquet(output_path)?",
+      "Why is partial aggregation useful before the shuffle?",
+      "With four configured shuffle partitions and three keys, how many downstream tasks would you predict?",
+      "Does the data pass through the driver? Can you deduce the exact file count from the number of executors?"
+    ],
+    "flow": [
+      {
+        "label": "4 input tasks",
+        "detail": "Filter and partially sum amounts by bucket."
+      },
+      {
+        "label": "Shuffle by bucket",
+        "detail": "Hash distribution targets 4 downstream partitions in this baseline."
+      },
+      {
+        "label": "4 downstream tasks",
+        "detail": "Finalize totals and write data to the scratch destination."
+      }
+    ],
+    "reasoning": [
+      "Creating the writer and selecting its mode configure a write. parquet(output_path) requests execution. There is no separate action needed to materialize totals first.",
+      "The expected shape has a partial sum before an exchange and a final sum after it. A partial sum can reduce the records transferred for repeated keys. Our deliberately small example has one of each surviving key per input partition, so it is not a demonstration of substantial data reduction.",
+      "Under the baseline, predict four upstream tasks and four tasks computing the shuffled output and writing it. Three distinct keys do not imply three partitions: keys may hash into the same partition, and some of the four partitions can be empty. A plain Parquet write does not inherently require another shuffle after this final aggregate.",
+      "Writer tasks write data to storage while the driver coordinates execution and commit. A writer task is not an executor: file counts also depend on empty partitions, file splitting, and writer behavior. Do not promise one file per key, task, or executor. The scratch path must be reachable by the executors; a driver-local directory is unsuitable for a distributed cluster."
+    ],
+    "output": "Written totals: bucket 0 → 900; bucket 1 → 1050; bucket 2 → 1200. Row order and exact part-file count are not promised. The mode rejects an existing destination.",
+    "verify_code": "# Preview the data query; this does not show the entire write command.\ntotals.explain(\"formatted\")\n\n# Optional read-back AFTER inspecting the write's jobs and stages.\n# This read and sort/show create separate work; do not count it as the write.\npractice.read.parquet(output_path).orderBy(\"bucket\").show()",
+    "evidence": [
+      "Look for the bucket hash exchange between partial and final sum. Use the completed write execution in the UI to inspect the actual writer path, rather than assuming totals.explain() includes the write command.",
+      "Follow the write execution to its stages. Compare upstream tasks with the four downstream tasks; inspect output records and shuffle metrics if available.",
+      "Read the directory back only after recording the write execution. The verification read, sorting, and display add their own work. Compare the three totals rather than equating storage files with executor processes."
+    ],
+    "spoken": "The aggregation needs compatible distribution by bucket, so I expect partial sums, a shuffle, and final sums. With AQE disabled and four shuffle partitions, I predict four downstream writer tasks even though there are only three keys. The Parquet call triggers the work, and tasks write to storage while the driver coordinates it. File count needs separate inspection.",
+    "followup": "Would coalesce(1) before writing be a good way to produce one large production file?",
+    "followup_answer": "It can force the final output through a single partition, limiting parallelism and creating a bottleneck. It can be reasonable for a tiny export, but choose file sizing and partitioning based on data volume and downstream readers for larger output. It does not remove the earlier aggregation shuffle. Compare both plans and the workload before adopting it.",
+    "sources": [
+      "parquet-write",
+      "aggregate-planning",
+      "partition-controls",
+      "file-writing",
+      "spark-ui"
+    ]
+  },
+  {
+    "id": "join-aggregate",
+    "title": "Join → aggregate",
+    "intro": "Broadcast a tiny lookup, then aggregate by its region. Is the entire query now free of shuffles?",
+    "code": "regions = (\n    practice.range(0, 3, 1, 1)\n    .select(\n        F.col(\"id\").alias(\"bucket\"),\n        F.when(F.col(\"id\") < 2, \"Domestic\")\n         .otherwise(\"International\").alias(\"region\"),\n    )\n)\nby_region = (\n    orders.filter(F.col(\"amount\") > 100)\n    .join(F.broadcast(regions), \"bucket\", \"inner\")\n    .groupBy(\"region\")\n    .agg(F.sum(\"amount\").alias(\"total\"))\n)\nrows_by_region = by_region.collect()  # Only two result rows here.\nprint(rows_by_region)",
+    "prompts": [
+      "Which side is being broadcast, and what does that change about the join?",
+      "Why might you see both BroadcastExchange and a hash-partitioning Exchange?",
+      "What task groups would you look for under the baseline?",
+      "What are the two totals? Would collect() still be suitable for millions of output rows?"
+    ],
+    "flow": [
+      {
+        "label": "1 lookup task",
+        "detail": "Produce the tiny lookup for broadcast to participating executors."
+      },
+      {
+        "label": "4 fact-side tasks",
+        "detail": "Filter orders, join against the broadcast lookup, partially sum by region."
+      },
+      {
+        "label": "Shuffle by region → 4 tasks",
+        "detail": "Combine region totals and return the two output rows."
+      }
+    ],
+    "reasoning": [
+      "For this supported inner equi-join with an explicit broadcast hint, expect BroadcastHashJoin with the tiny regions side as the build side. That side must be materialized and distributed. The join can then probe it locally while processing the orders partitions; broadcasting is still data movement.",
+      "The later groupBy(region) has its own distribution requirement. Expect a hash shuffle for region totals even though the join avoids shuffling the larger orders side for the join itself. BroadcastExchange is not a hash shuffle. Explain what each exchange does instead of counting every Exchange label as the same operation.",
+      "With this input and baseline, look for one task producing the one-partition lookup, four tasks processing orders/join/partial sums, and four downstream tasks combining shuffled totals. Broadcast materialization can have its own job, so do not infer one job from one collect(). Treat this as a predicted task-group shape, not fixed stage IDs or a captured run.",
+      "Buckets 0 and 1 map to Domestic; bucket 2 maps to International. The lookup has exactly one row per bucket. If it contained duplicate bucket keys, the join could multiply rows and totals before aggregation."
+    ],
+    "output": "Domestic → 1950; International → 1200. The two collected rows have no guaranteed ordering. Collect is reasonable for this tiny result, not an unbounded production output.",
+    "verify_code": "by_region.explain(\"formatted\")\n# Inspect the already-completed collect execution in the UI.\n# Explaining an unexecuted query predicts operators; it does not measure them.",
+    "evidence": [
+      "Distinguish the lookup BroadcastExchange and BroadcastHashJoin from the later hash-partitioning Exchange on region.",
+      "In the SQL execution, follow the associated jobs and compare their stages. Inspect the lookup materialization separately from the fact-side pipeline and final aggregate.",
+      "Check join output rows against the nine filtered input rows, and final output against two regions. Unexpected row growth can indicate duplicate dimension keys."
+    ],
+    "spoken": "Broadcasting the tiny lookup lets the fact-side tasks perform this join without reshuffling orders for the join. The subsequent region aggregation still requires a shuffle. I would distinguish the broadcast exchange from the hash exchange in the plan, check the associated jobs, and validate that the lookup keys do not multiply rows.",
+    "followup": "If the lookup grows, should you keep the broadcast hint?",
+    "followup_answer": "Reassess it. An explicit hint can prioritize broadcasting beyond the automatic size threshold, but collecting and distributing a large build side can exceed driver or executor memory or time out. Inspect sizes, statistics, join eligibility, and memory before choosing broadcast versus a shuffle join. A hint is not a universal speedup.",
+    "sources": [
+      "broadcast-api",
+      "join-planning",
+      "broadcast-exchange",
+      "aggregate-planning",
+      "collect-api"
+    ]
+  }
+]

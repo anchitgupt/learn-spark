@@ -16,10 +16,18 @@ class Page(HTMLParser):
         self.ids = set()
         self.links = []
         self.h1 = 0
+        self.code_blocks = []
+        self.in_code = False
+        self.in_pre = False
         self.feed(path.read_text())
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if tag == 'pre':
+            self.in_pre = True
+        if tag == 'code' and self.in_pre:
+            self.in_code = True
+            self.code_blocks.append('')
         if tag == 'h1':
             self.h1 += 1
         if 'id' in attrs:
@@ -30,6 +38,16 @@ class Page(HTMLParser):
                 self.links.append(attrs[key])
         if tag == 'img':
             assert 'alt' in attrs, 'Missing image alt text'
+
+    def handle_endtag(self, tag):
+        if tag == 'code':
+            self.in_code = False
+        if tag == 'pre':
+            self.in_pre = False
+
+    def handle_data(self, data):
+        if self.in_code:
+            self.code_blocks[-1] += data
 
 
 pages = {p.name: Page(p) for p in OUT.glob('*.html')}
@@ -71,4 +89,20 @@ assert phases
 for phase in phases:
     assert all(phase.get(k) for k in ['title', 'owner', 'state', 'detail', 'data', 'evidence', 'anchor'])
     assert phase['anchor'] in pages['execution-flow.html'].ids
-print(f'PASS: {len(pages)} pages, {checks} local links/assets, {len(lessons)} lesson schemas/examples, {len(questions)} questions.')
+predictions = json.loads((ROOT / 'content/predictions.json').read_text())
+prediction_ids = [item['id'] for item in predictions]
+assert len(set(prediction_ids)) == len(prediction_ids)
+assert all(re.fullmatch(r'[a-z0-9-]+', item) for item in prediction_ids)
+referenced = [item for lesson in lessons for item in lesson.get('exercises', [])]
+assert sorted(referenced) == sorted(prediction_ids), 'Each exercise must be referenced once'
+for exercise in predictions:
+    assert all(exercise.get(key) for key in ['title', 'intro', 'code', 'prompts', 'flow', 'reasoning', 'output', 'verify_code', 'evidence', 'spoken', 'followup', 'followup_answer', 'sources'])
+    assert all(step.get('label') and step.get('detail') for step in exercise['flow'])
+    ast.parse(exercise['code'])
+    ast.parse(exercise['verify_code'])
+    assert exercise['id'] in pages['predict-execution.html'].ids
+    assert all('source-' + source in pages['predict-execution.html'].ids for source in exercise['sources'])
+# This lesson's pre/code blocks are all Python, including shared setup and AQE.
+for code in pages['predict-execution.html'].code_blocks:
+    ast.parse(code)
+print(f'PASS: {len(pages)} pages, {checks} local links/assets, {len(lessons)} lesson schemas/examples, {len(questions)} questions, {len(predictions)} prediction exercises.')

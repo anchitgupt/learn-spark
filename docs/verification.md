@@ -67,3 +67,34 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34803026339](https://github.com/anchitgupt/learn-spark/actions/runs/34803026339) completed successfully.
 - All 26 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
 - Live lesson: https://anchitgupt.github.io/learn-spark/execution-flow.html
+
+# Prediction exercises update — 2026-09-14
+
+## Content and build
+
+- Added a tenth lesson, "Predict what Spark will do": a shared classic PySpark 3.5.7 baseline (four Range partitions, four SQL shuffle partitions, AQE disabled), three prediction exercises (filter → count, groupBy → write, join → aggregate), an AQE comparison, and three authored practice questions. None is presented as a reported interview question.
+- Exercise records live in `content/predictions.json` and render through `scripts/predictions.py` as native disclosures. The lesson adds no JavaScript or browser storage.
+- `npm run build`: 14 static pages generated.
+- `npm run check`: 517 local links/assets, ten lesson schemas and example syntax, 15 question records, three prediction exercises (IDs, lesson references, source anchors, and Python syntax for every code block on the lesson page), and all three JavaScript files passed. `git diff --check` was clean.
+- Independently checked the example arithmetic: nine rows survive the filter (input partition counts 0, 3, 3, 3); bucket totals 900, 1050, 1200; Domestic 1950 and International 1200. The examples were not executed in Spark: PySpark and a Java runtime are not installed on this machine. Task counts remain source-reviewed predictions, not runtime observations.
+
+## Chromium browser checks
+
+46 automated checks passed in headless Chromium 151 through Playwright against a local HTTP preview, with reduced motion enabled unless noted.
+
+- Saved progress for the previous nine lessons displays as 9/10 and resumes at the new lesson. Marking it understood reaches 10/10 and keeps the existing saved note.
+- All three answer disclosures and interviewer follow-ups open by keyboard and mouse at 1280 and 390 CSS pixels. Rendered expected results and flow steps match the content file.
+- The copy button copies the exercise snippet exactly.
+- Search finds each exercise and links to its anchor; Escape dismisses the dialog.
+- The notebook offers the new topic. A note saved under it persists after reload beside the existing note.
+- The questions page renders 15 cards, including the three new practice questions; the Scenario filter shows nine.
+- Mobile navigation lists the new lesson and dismisses on Escape.
+- All 14 pages checked at 320, 390, 768, and 1280 CSS pixels with every disclosure open: 56 combinations without document overflow.
+- With JavaScript disabled at phone width, copy buttons are hidden, every answer and follow-up opens by keyboard, and the page does not overflow.
+- No JavaScript page errors or console errors occurred.
+
+An earlier browser run timed out clicking the second exercise disclosure while several browser pages were open in different states. It did not reproduce: with default motion settings (smooth scrolling enabled), all three disclosures opened by mouse at 390 and 1280 CSS pixels.
+
+Visually inspected desktop and phone screenshots of the opened exercises. The skip link and sticky header that appear mid-image are element-screenshot artifacts; on the live page the skip link stays off-screen until focused. Screenshots remain in ignored `output/playwright/`.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

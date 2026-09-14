@@ -110,5 +110,35 @@
     "answer": "No. A shuffle exchange redistributes data for a required partitioning. A BroadcastExchange prepares and distributes a broadcast relation. Read the operator type and the surrounding join or aggregation, rather than counting the word Exchange.",
     "followup": "Why might a broadcast join avoid shuffling the large side and still require a separate preparation job?",
     "source": "Authored follow-up practice; not reported as an actual interview question."
+  },
+  {
+    "id": "predict-filter-count",
+    "topic": "predict-execution",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Can filter followed by count require a shuffle even though filter is narrow?",
+    "answer": "The filter is local to each input partition, but the final count is global. Under this four-partition baseline I expect four tasks to filter and partially count, then a single downstream task to combine those counts. The answer is nine. I would verify the count query, rather than only explaining the filtered DataFrame.",
+    "followup": "If the filter removes every row, do the input tasks disappear?",
+    "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
+  },
+  {
+    "id": "predict-groupby-write",
+    "topic": "predict-execution",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "If a groupBy has three keys and four shuffle partitions, how many tasks and output files should I expect?",
+    "answer": "The aggregation needs compatible distribution by bucket, so I expect partial sums, a shuffle, and final sums. With AQE disabled and four shuffle partitions, I predict four downstream writer tasks even though there are only three keys. The Parquet call triggers the work, and tasks write to storage while the driver coordinates it. File count needs separate inspection.",
+    "followup": "Would coalesce(1) before writing be a good way to produce one large production file?",
+    "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
+  },
+  {
+    "id": "predict-join-aggregate",
+    "topic": "predict-execution",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Does broadcasting a lookup remove every shuffle from a join followed by aggregation?",
+    "answer": "Broadcasting the tiny lookup lets the fact-side tasks perform this join without reshuffling orders for the join. The subsequent region aggregation still requires a shuffle. I would distinguish the broadcast exchange from the hash exchange in the plan, check the associated jobs, and validate that the lookup keys do not multiply rows.",
+    "followup": "If the lookup grows, should you keep the broadcast hint?",
+    "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
   }
 ]

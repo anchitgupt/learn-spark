@@ -60,3 +60,28 @@
 @media(max-width:1100px){.is-interactive .flow-board{grid-template-columns:1fr}.flow-phase-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-right:0;border-bottom:1px solid var(--line)}.is-interactive .flow-panel{min-height:440px}}
 @media(max-width:700px){.flow-feature{gap:15px;align-items:start;flex-wrap:wrap}.flow-feature>.eyebrow{max-width:none;flex-basis:100%}.flow-feature strong{font-size:21px}.flow-feature small{font-size:12px}.flow-phase-nav{gap:5px;padding:8px}.flow-phase-nav button{font-size:11px;padding:9px 6px}.flow-panel{padding:20px}.is-interactive .flow-panel{min-height:520px}.flow-controls{flex-wrap:wrap;justify-content:space-between}.flow-controls #flow-status{order:3;flex-basis:100%;font-size:11px}.flow-controls button{font-size:11px;min-height:44px}.flow-entry nav a{font-size:12px;min-height:40px}.article .numbered-flow{padding-left:23px}.article .numbered-flow li{font-size:15px}.article .section-source{overflow-wrap:anywhere}.flow-panel dd{font-size:13px}}
 @media print{.flow-board,.is-interactive .flow-board{display:block}.flow-panel[hidden]{display:block!important}.flow-panel{break-inside:avoid;min-height:0!important}.flow-phase-nav,.flow-controls{display:none!important}.table-scroll{overflow:visible}.article table{min-width:0}}
+/* Predict, reveal, and verify: native disclosures keep the lesson usable offline. */
+.exercise-jumps{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.exercise-jumps a{border:1px solid var(--line);border-radius:5px;padding:12px 15px;font-size:12px;color:var(--accent);background:var(--white)}
+.prediction-exercise{padding-top:28px;border-top:1px solid var(--line)}
+.prediction-exercise>.eyebrow{color:var(--accent);margin-bottom:14px}
+.prediction-prompts{padding:18px 22px;background:#eaede2;border-left:3px solid #819174;margin:22px 0}
+.prediction-exercise h3{font-family:var(--serif);font-size:23px;line-height:1.35;margin:20px 0 14px;font-weight:500}
+.prediction-prompts h3{margin-top:0}
+.prediction-prompts ol,.prediction-body>ol:not(.prediction-flow){padding-left:21px}
+.prediction-prompts li,.prediction-body li{font-size:14px;margin-bottom:12px}
+.article .prediction-prompts>p{font-size:12px;margin:0}
+.prediction-answer>summary{font-size:14px;line-height:1.7;padding:18px 20px}
+.prediction-answer[open]>summary{border-bottom:1px solid var(--line);color:var(--accent)}
+.prediction-body{padding:4px 22px 24px;min-width:0}
+.prediction-body p{padding:0}
+.prediction-body>.expected{border:1px solid var(--line);margin-top:20px}
+.prediction-body .followup-answer p{padding:0 18px}
+.prediction-body>.text-link{display:inline-block;margin-top:12px;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.prediction-flow{list-style:none;padding:0;margin:20px 0 25px;display:grid;gap:23px}
+.prediction-flow li{position:relative;border:1px solid #d7ddcf;border-left:3px solid #819174;border-radius:4px;background:#eef0e8;padding:13px 16px;margin:0}
+.prediction-flow li:not(:last-child)::after{content:'↓';position:absolute;bottom:-26px;left:20px;font-size:18px;color:var(--accent)}
+.prediction-flow strong,.prediction-flow span{display:block}
+.prediction-flow strong{font-size:13px}
+.prediction-flow span{font-size:12px;margin-top:4px}
+@media(max-width:700px){.exercise-jumps{display:grid}.exercise-jumps a{font-size:13px}.prediction-prompts{padding:17px}.prediction-body{padding:2px 16px 20px}.prediction-answer>summary{padding:16px;font-size:13px}.prediction-flow li{padding:12px}.prediction-body h3{font-size:21px}}

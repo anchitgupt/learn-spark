@@ -492,5 +492,123 @@
       "jobs-stages-tasks",
       "partitions-shuffles"
     ]
+  },
+  {
+    "slug": "predict-execution",
+    "title": "Predict what Spark will do",
+    "minutes": 25,
+    "dek": "Three interview exercises. Read the code, predict the work, then check your reasoning against the plan and Spark UI.",
+    "idea": "Predict the distribution each operator needs. State your assumptions before giving a task count, then verify the actual execution.",
+    "exercises": [
+      "filter-count",
+      "groupby-write",
+      "join-aggregate"
+    ],
+    "sections": [
+      {
+        "id": "baseline",
+        "title": "Set the rules before counting tasks",
+        "body": "<p>Start after <a href=\"execution-flow.html\">the complete execution-flow lesson</a>. These are original practice exercises for <strong>classic PySpark 3.5.7 batch execution</strong>. They are not questions reported from an interview and this page does not run Spark.</p><p>Use the setup below: four input partitions, four configured SQL shuffle partitions, AQE disabled, no cached/reused query results, and no failed or speculative attempts. We disable AQE only to make the first predictions easier to inspect; this is not a production tuning recommendation. Other versions and managed runtimes can produce different plans.</p><p>Each answer gives a <strong>source-reviewed expected shape, not an observed execution</strong>. Partition counts describe work to schedule; available CPU/resource slots determine how much can run concurrently. Stage IDs, job totals, and durations are runtime evidence.</p><nav class=\"exercise-jumps\" aria-label=\"Choose an exercise\"><a href=\"#filter-count\">01 Filter → count</a><a href=\"#groupby-write\">02 GroupBy → write</a><a href=\"#join-aggregate\">03 Join → aggregate</a></nav><p class=\"section-source\">Baseline references: <a href=\"#source-range\">Range partitions</a> · <a href=\"#source-aqe\">AQE settings</a> · <a href=\"#source-task-scheduling\">task scheduling</a></p>"
+      },
+      {
+        "id": "setup",
+        "title": "One small dataset, three predictions",
+        "body": "<p>Run this setup once in a notebook with an existing <code>spark</code> session. <a href=\"architecture.html#try-it\">Create a local session</a> if needed. A new SQL session keeps these SQL settings separate, but shares the application’s SparkContext and cache. Do not call <code>practice.stop()</code> to clean up the exercise: it would stop the shared context.</p><div class=\"code-block\"><div><span>PYTHON / PYSPARK</span><button class=\"copy-code js-only\">Copy code</button></div><pre><code>from pyspark.sql import functions as F\nfrom uuid import uuid4\n\n# Classic PySpark: use an existing spark session.\npractice = spark.newSession()\npractice.conf.set(&quot;spark.sql.adaptive.enabled&quot;, &quot;false&quot;)\npractice.conf.set(&quot;spark.sql.shuffle.partitions&quot;, &quot;4&quot;)\n\norders = (\n    practice.range(0, 12, 1, 4)\n    .withColumn(&quot;bucket&quot;, F.col(&quot;id&quot;) % 3)\n    .withColumn(&quot;amount&quot;, F.col(&quot;id&quot;) * 50)\n)\n\n# This default is for local mode on your own machine only.\n# On a cluster, replace it with an accessible shared scratch URI.\noutput_path = f&quot;file:///tmp/spark-fieldnotes-{uuid4().hex}/totals&quot;\nprint(&quot;Spark version:&quot;, practice.version)\nprint(&quot;Spark UI:&quot;, practice.sparkContext.uiWebUrl)\nprint(&quot;Scratch destination:&quot;, output_path)</code></pre></div><p>The write destination above is for local mode only. On a cluster, choose a fresh scratch URI on storage reachable by all participating executors before running exercise 2. The write uses <code>errorifexists</code>, so it will fail if you reuse an existing destination. Rerun the setup to create a new local destination.</p><p>IDs 0–11 form four input partitions: 0–2, 3–5, 6–8, and 9–11. Each row has <code>bucket = id % 3</code> and <code>amount = id × 50</code>. The filter in every exercise retains IDs 3–11.</p><p class=\"section-source\">Setup references: <a href=\"#source-session\">SQL session isolation</a> · <a href=\"#source-range\">Range API</a> · <a href=\"#source-parquet-write\">write modes</a></p>"
+      }
+    ],
+    "code": "# After the shared setup, compare AQE on the grouped query.\n# Rebuild the query so it uses the changed SQL configuration.\npractice.conf.set(\"spark.sql.adaptive.enabled\", \"true\")\ntry:\n    adaptive_totals = (\n        orders.filter(F.col(\"amount\") > 100)\n        .groupBy(\"bucket\")\n        .agg(F.sum(\"amount\").alias(\"total\"))\n    )\n    adaptive_totals.explain(\"formatted\")  # Initial plan\n    adaptive_rows = adaptive_totals.collect()  # Only three rows\n    adaptive_totals.explain(\"formatted\")  # Inspect final adaptive plan\n    print(adaptive_rows)\nfinally:\n    practice.conf.set(\"spark.sql.adaptive.enabled\", \"false\")",
+    "output": "The same three bucket totals: 0 → 900, 1 → 1050, 2 → 1200, in unspecified order. Compare initial and final plans and observed downstream task counts. AQE may coalesce shuffle partitions; do not prescribe an exact adaptive task count.",
+    "pitfall": "Do not compare unrelated runs: the optional read-back, show(), collect(), or another action can create additional work. Inspect the SQL execution associated with the action you are explaining. WholeStageCodegen labels and AQE query stages are not scheduler stage IDs.",
+    "question": "How would you explain a PySpark snippet you have never seen before?",
+    "answer": "First I state the runtime, data shape, and settings. I identify the action and trace the plan from input to output, explaining each operator’s required distribution. I distinguish local processing, broadcasting, and shuffling. Then I predict task groups from the relevant partitions, keeping concurrency separate. Finally I check the executed plan and associated jobs and stages, validate the result, and explain any differences from my prediction.",
+    "sources": [
+      {
+        "id": "session",
+        "title": "Separate SQL session, shared SparkContext",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.newSession.html"
+      },
+      {
+        "id": "range",
+        "title": "Explicit Range input partitions",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.range.html"
+      },
+      {
+        "id": "count-api",
+        "title": "DataFrame.count",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.count.html"
+      },
+      {
+        "id": "count-source",
+        "title": "Count action implementation",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/Dataset.scala"
+      },
+      {
+        "id": "aggregate-planning",
+        "title": "Partial and final aggregate planning",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/aggregate/AggUtils.scala"
+      },
+      {
+        "id": "distribution",
+        "title": "Required distribution and exchanges",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/EnsureRequirements.scala"
+      },
+      {
+        "id": "explain",
+        "title": "Explain modes and plan interpretation",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-explain.html"
+      },
+      {
+        "id": "spark-ui",
+        "title": "SQL, jobs, stages, and task evidence",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "id": "parquet-write",
+        "title": "Parquet writes and save modes",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrameWriter.parquet.html"
+      },
+      {
+        "id": "file-writing",
+        "title": "File writer task behavior",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FileFormatWriter.scala"
+      },
+      {
+        "id": "partition-controls",
+        "title": "Coalesce and output partition controls",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.coalesce.html"
+      },
+      {
+        "id": "broadcast-api",
+        "title": "Explicit broadcast hint",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.functions.broadcast.html"
+      },
+      {
+        "id": "join-planning",
+        "title": "Join selection for supported strategies",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala"
+      },
+      {
+        "id": "broadcast-exchange",
+        "title": "Broadcast materialization",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala"
+      },
+      {
+        "id": "collect-api",
+        "title": "Collect returns rows to driver memory",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.collect.html"
+      },
+      {
+        "id": "aqe",
+        "title": "Shuffle partitions, join hints, and AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "id": "task-scheduling",
+        "title": "Stage tasks and shuffle dependencies",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7 · classic PySpark batch"
   }
 ]
