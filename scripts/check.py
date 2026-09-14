@@ -11,6 +11,25 @@ from urllib.parse import unquote, urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / '_site'
 
+# Versioned Spark documentation and source, plus the official documentation of the
+# sibling Apache format/table projects this site cites for storage topics.
+APPROVED_DOC_PREFIXES = (
+    'spark.apache.org/docs/',
+    'github.com/apache/spark/blob/v3.5.7/',
+    'parquet.apache.org/',
+    'orc.apache.org/',
+    'avro.apache.org/',
+    'iceberg.apache.org/',
+    'hudi.apache.org/',
+    'docs.delta.io/',
+)
+
+
+def approved_source(url):
+    split = urlsplit(url)
+    combined = split.netloc + split.path
+    return split.scheme == 'https' and any(combined.startswith(prefix) for prefix in APPROVED_DOC_PREFIXES)
+
 
 class Page(HTMLParser):
     def __init__(self, path):
@@ -73,21 +92,21 @@ assert len(set(slugs)) == len(slugs)
 for lesson in lessons:
     assert lesson['sources'] and lesson['reviewed'] and lesson['version']
     assert lesson.get('chapter'), lesson['slug'] + ': needs a chapter label'
-    assert all(s['url'].startswith((
-        'https://spark.apache.org/docs/',
-        'https://github.com/apache/spark/blob/v3.5.7/',
-    )) for s in lesson['sources']), 'Use versioned official documentation or Spark source'
+    assert all(approved_source(s['url']) for s in lesson['sources']), 'Use versioned official documentation or Spark source'
     ast.parse(lesson['code'])
     assert escape(lesson['chapter']) + ' / LESSON' in (OUT / (lesson['slug'] + '.html')).read_text(), lesson['slug'] + ': eyebrow must name its chapter'
 questions = json.loads((ROOT / 'content/questions.json').read_text())
 predictions = json.loads((ROOT / 'content/predictions.json').read_text())
+question_topics = json.loads((ROOT / 'content/question-topics.json').read_text())
 exercises = {item['id']: item for item in predictions}
 questions_page = (OUT / 'questions.html').read_text()
 assert len(set(q['id'] for q in questions)) == len(questions)
 assert all(re.fullmatch(r'[a-z0-9-]+', q['id']) for q in questions)
 for q in questions:
-    assert q['topic'] in slugs and q['source'], q['id'] + ': needs a known topic and a source'
+    assert (q['topic'] in slugs or q['topic'] in question_topics) and q['source'], q['id'] + ': needs a known topic and a source'
     assert q.get('origin') in ('reported', 'practice'), q['id'] + ': origin must be "reported" or "practice"'
+    if 'collection' in q:
+        assert q['collection'] in ('senior-de', 'file-formats'), q['id'] + ': unknown collection'
     if 'inspiration' in q:
         assert q['origin'] == 'practice', q['id'] + ': an online topic list is not a reported interview'
         inspiration = q['inspiration']
@@ -98,9 +117,7 @@ for q in questions:
         assert q['references'] and q.get('version') == 'Apache Spark 3.5.7', q['id'] + ': references need the Spark baseline'
         assert date.fromisoformat(q['reviewed']).isoformat() == q['reviewed'], q['id'] + ': needs an ISO review date'
         for ref in q['references']:
-            url = urlsplit(ref['url'])
-            official = (url.netloc == 'spark.apache.org' and url.path.startswith('/docs/3.5.7/')) or (url.netloc == 'github.com' and url.path.startswith('/apache/spark/blob/v3.5.7/'))
-            assert ref['title'].strip() and url.scheme == 'https' and official, q['id'] + ': use named, versioned Apache references'
+            assert ref['title'].strip() and approved_source(ref['url']), q['id'] + ': use named, versioned Apache references'
     if 'exercise' in q:
         # Exercise-linked questions take the exercise's spoken answer and follow-up at build time.
         assert q['exercise'] in exercises and 'answer' not in q and 'followup' not in q, q['id'] + ': reference one known exercise instead of copying its answer'

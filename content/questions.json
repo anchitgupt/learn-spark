@@ -457,5 +457,304 @@
     ],
     "reviewed": "2026-09-14",
     "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-row-vs-columnar",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "When would you store records in a row-based format, and when in a columnar one?",
+    "answer": "Row-based files (Avro, JSON lines, CSV) keep one record's fields together and fit write-once, read-whole-record flows: streaming ingest, Kafka payloads, log shipping. Columnar files (Parquet, ORC) keep one column's values together and fit analytic scans over a few columns of many rows, where they win three separate ways: only projected columns are read, same-type values compress harder, and vectorized readers decode contiguous batches. Pick by read pattern first, write pattern second.",
+    "followup": "What does a query that reads every column of a wide table lose with a columnar layout?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet file format",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      },
+      {
+        "title": "Spark 3.5.7: Parquet files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      },
+      {
+        "title": "Spark 3.5.7: Avro files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-avro.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-splittable",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "A 20 GB gzip-compressed CSV runs as a single task. The same rows written as gzip-compressed Parquet parallelize fine. Why?",
+    "answer": "Splittability is a property of the container, not the codec. A raw gzip stream has no internal boundaries a reader can seek to, so the whole file is one unit of work. Parquet compresses each page independently and explicitly separates metadata from data, so any reader first reads the footer and then reads row groups and column chunks selectively — the container stays splittable regardless of which codec is applied inside. The Parquet version also reads only the needed columns and skips text parsing entirely.",
+    "followup": "When can a single Parquet file still behave like one unsplittable unit of work?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet file format: metadata separated from data",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      },
+      {
+        "title": "Spark 3.5.7: Parquet files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-parquet-open",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "How does a Parquet reader open a file, and what does that imply for writers?",
+    "answer": "It starts at the end: magic bytes and footer length, then the footer — the schema, every column-chunk offset, and per-chunk statistics — and only then reads the chunks and pages the query needs. The footer is written last because offsets and statistics can only be known after all row groups are written, which is exactly why Parquet is write-once: you cannot append a row group in place, and new data becomes new files. That same property is what lets table formats commit atomically by adding files.",
+    "followup": "Why can a Parquet reader skip a column without decoding anything else in the row group?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet file format: single-pass writing and readers",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-rowgroup-page",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "What are row groups and pages, and what does each level let a scan skip?",
+    "answer": "Row groups are the file's horizontal slices; each row group stores one column chunk per column; each chunk is divided into pages, the smallest unit of encoding, compression, and statistics. Row-group statistics let a scan drop whole groups; page-level indexes allow finer skipping inside a chunk. The sizes trade off in both directions: small row groups mean more metadata and weaker compression, large ones mean coarser skipping and larger reads.",
+    "followup": "Which knob does Spark expose to control how much file input lands in one task, and what is its default?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet file format",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      },
+      {
+        "title": "Apache Parquet page index",
+        "url": "https://parquet.apache.org/docs/file-format/pageindex/"
+      },
+      {
+        "title": "Spark 3.5.7 SQL tuning: maxPartitionBytes",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-minmax",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "A timestamp filter reads every row group even though statistics exist for that column. Why?",
+    "answer": "Min/max statistics can only drop a row group when the predicate range cannot intersect the group's range. If the data was written in arbitrary order, every row group's min/max spans the entire domain — the statistics are correct and useless. The fix happens at write time: sort or cluster the data on the filter column, or make it the partition column so whole directories can be skipped.",
+    "followup": "Why is partitioning alone a poor fit for filtering on a high-cardinality column?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet file format: metadata and statistics",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      },
+      {
+        "title": "Spark 3.5.7: Parquet filter pushdown",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-dictionary",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "A UUID column makes the Parquet file far larger than expected. What happened?",
+    "answer": "Dictionary encoding stores each distinct value once and encodes rows as indexes — excellent for repetitive data, but a near-unique column like UUIDs keeps growing the dictionary until it exceeds its budget, and the writer falls back to plain encoding, storing every full value. Consider whether the raw identifier must be stored for these scans, or whether a hashed or bucketed surrogate is enough for analytics.",
+    "followup": "Which Parquet encoding helps a sorted integer or date column, and why?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet: data page encodings",
+        "url": "https://parquet.apache.org/docs/file-format/data-pages/encodings/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-bloom",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "Min/max statistics cannot help an equality filter on a high-cardinality column. What structure can, and when is it worth the cost?",
+    "answer": "Bloom filters: a compact per-chunk structure that can prove a value is absent, so equality predicates like user_id = 'abc' can skip chunks even when the ranges overlap everywhere. They add write cost and file size, so enable them per column where equality filtering dominates. Spark exposes them as an ORC table option; Parquet supports them too.",
+    "followup": "Why can a bloom filter never produce a false negative — only a false positive?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Apache Parquet: bloom filter",
+        "url": "https://parquet.apache.org/docs/file-format/bloomfilter/"
+      },
+      {
+        "title": "Spark 3.5.7: ORC bloom filter option",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-orc.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-vectorized",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "The Parquet vectorized reader is on by default. When does decoding fall back, and why does it matter?",
+    "answer": "Vectorized decoding reads columnar batches (4096 rows per batch by default) and is far friendlier to CPU caches than row-at-a-time decoding. Historically nested types forced the row path; Spark 3.3 added nested-column vectorization, enabled by default, on top of the base reader. The config table also shows that record-level filtering only takes effect when the vectorized reader is disabled. It matters because a plan can look columnar while the reader quietly decodes row by row.",
+    "followup": "Why does the columnar reader batch size interact with executor memory limits?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: Parquet configuration table",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-pruning-levels",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "Distinguish partition pruning, row-group skipping, column pruning, and predicate pushdown by where each happens.",
+    "answer": "Partition pruning happens during directory listing, before any file opens — directory names encode values. Row-group and file skipping happens once the footer is read, using statistics. Column pruning happens from chunk offsets, so unreferenced columns are never read. Predicate pushdown is the mechanism that hands supported filters to the reader so pages can be skipped while decoding. When a scan is slow, name which level failed before changing any configuration.",
+    "followup": "Which of the four can work without reading a single byte of file data?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: Parquet options and pushdown",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      },
+      {
+        "title": "Apache Parquet file format",
+        "url": "https://parquet.apache.org/docs/file-format/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-schema-evolution",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "Can you add, rename, or drop a column in an existing Parquet dataset?",
+    "answer": "Add: yes — older files simply read null for the column. Rename or drop: not safely in plain Parquet, because resolution is by name and old files still carry the old name; table formats add ID or name-mapping layers that make those metadata-only operations. Type changes are safe only when widening (int to long, float to double, higher decimal precision). And reading a directory whose files disagree on schema requires mergeSchema, which reads every file footer — off by default for a reason.",
+    "followup": "Why can mergeSchema dominate the startup time of a job on a table with millions of files?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: Parquet schema merging",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      },
+      {
+        "title": "Iceberg spec: schema evolution by field IDs",
+        "url": "https://iceberg.apache.org/spec/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-table-layer",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "What do Delta Lake, Apache Iceberg, and Apache Hudi add over plain Parquet files?",
+    "answer": "A transaction or table layer that defines which files constitute the table at each version. Parquet files are immutable and object stores have no atomic multi-file commit, so a plain directory of files provides no ACID transactions, no safe concurrent writers, and no time travel. Iceberg swaps table metadata files atomically and tracks snapshots through manifest lists; Delta commits ordered log entries that add and remove files. Spark reads each format through its own connector, and their guarantees come from those projects rather than from Spark itself.",
+    "followup": "Does adopting a table format stop a table from accumulating small files?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake documentation",
+        "url": "https://docs.delta.io/latest/delta-intro.html"
+      },
+      {
+        "title": "Apache Iceberg table spec",
+        "url": "https://iceberg.apache.org/spec/"
+      },
+      {
+        "title": "Apache Hudi overview",
+        "url": "https://hudi.apache.org/docs/overview/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-orc-vs-parquet",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "ORC or Parquet — what actually differs for a Spark pipeline?",
+    "answer": "Both are columnar containers with statistics, compression, and vectorized readers, and Spark supports each natively. ORC's Spark integration exposes built-in bloom filters and a native implementation that has been the default since 2.3, with zstd and columnar encryption available as table options. Parquet has the broader ecosystem because most engines default to it. For a given lakehouse the decision is usually ecosystem-driven; the fundamentals are shared.",
+    "followup": "Which format would you expect in a Hive-centric warehouse, and what would change your answer?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: ORC files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-orc.html"
+      },
+      {
+        "title": "Spark 3.5.7: Parquet files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "format-avro-role",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "file-formats",
+    "question": "Where does Avro fit if Parquet is the analytics format?",
+    "answer": "Avro is row-based and built for writing and moving whole records: Kafka messages, CDC events, landing zones. Its distinguishing feature is schema resolution — reader and writer schemas are reconciled at read time using field names and defaults, so producers and consumers can evolve independently. In Spark, from_avro and to_avro decode and encode Kafka payloads, and the module is external: add it with --packages. The common pattern is Avro in the landing layer, Parquet for analytics.",
+    "followup": "Why is Avro a poor fit for scanning one column across a billion rows?",
+    "source": "Original practice wording from a supplied senior-prep file-format bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: Avro files and to_avro/from_avro",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-avro.html"
+      },
+      {
+        "title": "Apache Avro specification",
+        "url": "https://avro.apache.org/docs/1.11.4/specification/"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
   }
 ]

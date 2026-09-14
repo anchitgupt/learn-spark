@@ -95,7 +95,11 @@ for i,l in enumerate(LESSONS):
         exercise = find(PREDICTIONS, 'id', exercise_id, f'content/lessons.json: lesson "{l["slug"]}" lists unknown exercise "{exercise_id}"')
         sections += render_exercise(exercise, j)
         toc += f'<a href="#{e(exercise_id)}">{j:02} {e(exercise["title"])}</a>'
-    diagram='<figure class="architecture"><img src="assets/architecture.svg" alt="The driver schedules tasks on executor processes. The cluster manager allocates resources. Executors read and write external storage."><figcaption>Simplified classic Spark architecture. A worker machine may host executor processes.</figcaption></figure>' if l['slug']=='architecture' else ''
+    diagram=''
+    if l['slug'] == 'architecture':
+        diagram = '<figure class="architecture"><img src="assets/architecture.svg" alt="The driver schedules tasks on executor processes. The cluster manager allocates resources. Executors read and write external storage."><figcaption>Simplified classic Spark architecture. A worker machine may host executor processes.</figcaption></figure>'
+    if l['slug'] == 'storage-formats':
+        diagram = '<figure class="architecture"><img src="assets/parquet-layout.svg" alt="A Parquet file contains row groups, each storing one column chunk per column; each chunk is split into pages with statistics; the footer at the end holds the schema, row-group offsets, and statistics, and is read first."><figcaption>Simplified Parquet physical layout. A reader starts at the footer, then touches only the row groups, column chunks, and pages a query needs.</figcaption></figure>'
     walkthrough = render_flow(PHASES) if l.get('walkthrough') == 'execution' else ''
     entry = ''
     if walkthrough:
@@ -158,7 +162,7 @@ def senior_guide():
 cards=''
 for q in QUESTIONS:
     lesson, answer, followup = resolve_question(q)
-    origin = 'Interview-reported' if q.get('origin') == 'reported' else ('Supplied practice' if q.get('collection') == 'senior-de' else ('Web-inspired practice' if q.get('inspiration') else 'Authored practice'))
+    origin = 'Interview-reported' if q.get('origin') == 'reported' else ('Supplied practice' if q.get('collection') in ('senior-de', 'file-formats') else ('Web-inspired practice' if q.get('inspiration') else 'Authored practice'))
     topic_label = f'<a href="{q["topic"]}.html">{e(lesson["title"])} ↗</a>' if 'slug' in lesson else f'<span>{e(lesson["title"])}</span>'
     cards+=f'''<article class="question-card" id="{q['id']}" data-type="{q['type']}" data-search="{e((q['question']+' '+answer+' '+lesson['title']).lower(),quote=True)}"><div class="question-meta"><span>{q['type']}</span><span class="question-origin">{origin}</span>{topic_label}</div><h2>{e(q['question'])}</h2><details class="answer"><summary>Reveal the reasoning</summary><p>{e(answer)}</p><p><strong>Follow-up:</strong> {e(followup)}</p>{question_sources(q)}</details></article>'''
 page('questions','Interview questions',f'''<div class="collection"><div class="eyebrow">02 / PUT IT INTO PRACTICE</div><h1>Think it through.<br><em>Then say it out loud.</em></h1><p class="article-dek">A good answer explains the trade-off, not just the definition.</p><div class="collection-intro"><p>Interview-reported, authored, web-inspired, and supplied practice questions are labeled separately. Reviewed answers include technical references, a version baseline, and a review date. Keep your own drafts in <a href="notebook.html">your notebook ↗</a>.</p><a class="button" href="notebook.html#question-form">+ Add your own question</a></div>{senior_guide()}<div class="filter-bar js-only"><label class="filter-search">Find a question<input type="search" id="question-search" placeholder="Search questions and answers…"></label><div class="filters" role="group" aria-label="Question type"><button class="active" aria-pressed="true" data-filter="All">All</button><button aria-pressed="false" data-filter="Scenario">Scenarios</button><button aria-pressed="false" data-filter="Concept">Concepts</button></div></div><p id="question-count" aria-live="polite">{len(QUESTIONS)} questions</p><div id="question-list">{cards}</div><p id="no-questions" hidden>No questions match. Try a different term or filter.</p></div>''')

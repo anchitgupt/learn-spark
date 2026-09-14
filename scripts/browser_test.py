@@ -221,6 +221,10 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     page.wait_for_selector('#search-results a')
     hrefs = page.eval_on_selector_all('#search-results a', 'els => els.map(e => e.getAttribute("href"))')
     check('search finds the groupBy exercise', any('predict-execution.html#groupby-write' in h for h in hrefs), ', '.join(hrefs[:3]))
+    page.fill('#site-search', 'dictionary encoding')
+    page.wait_for_selector('#search-results a')
+    hrefs = page.eval_on_selector_all('#search-results a', 'els => els.map(e => e.getAttribute("href"))')
+    check('search finds the file-format question', any('questions.html#format-dictionary' in h for h in hrefs), ', '.join(hrefs[:3]))
     page.keyboard.press('Escape')
     check('Escape closes search', not page.locator('#search-dialog').evaluate('d => d.open'))
     page.keyboard.press('Control+k')
@@ -279,6 +283,17 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     check('new unionByName question is searchable',
           page.locator('#web-union-by-name').is_visible() and visible() == 1)
     page.fill('#question-search', '')
+
+    # ---------- storage formats lesson ----------
+    report.section('Storage formats lesson')
+    page.goto(url('storage-formats.html'))
+    check('the Parquet layout diagram renders',
+          page.locator('figure.architecture img[src="assets/parquet-layout.svg"]').is_visible())
+    diagram_box = page.locator('figure.architecture img[src="assets/parquet-layout.svg"]').bounding_box()
+    check('the diagram has a rendered size', bool(diagram_box) and diagram_box['width'] > 0)
+    page.locator('#explain-back details.answer > summary').click()
+    check('the storage explain-back disclosure opens',
+          page.locator('#explain-back details.answer').evaluate('d => d.open'))
 
     # ---------- notebook ----------
     report.section('Notebook')

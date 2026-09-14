@@ -244,3 +244,21 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - `npm run test:browser`: all 69 checks passed, including every page at 320/390/768/1280 CSS pixels with disclosures open.
 - The first browser pass detected a 320 px overflow from the `pyspark.sql.DataFrame.localCheckpoint` reference title. Confirmed its right edge at 335.75 px, added wrapping within the reference list, and reran the full suite successfully.
 - No Spark runtime execution or publication was performed in this batch.
+
+# Storage formats lesson and file-format questions — 2026-09-14
+
+## Content
+
+- Added "Storage formats: Parquet, ORC & Avro" as the eleventh fundamentals lesson (slug `storage-formats`, lesson 11 of 13), placed between "Reading the Spark UI and fixing slow jobs" and the execution-flow capstone. Existing slugs and saved progress remain valid; the capstone and prediction lessons renumber to 12 and 13 automatically.
+- The lesson covers row versus column layout, the Parquet physical hierarchy (row groups, column chunks, pages, footer read first, write-once files), page encodings and the dictionary fallback, bloom filters, the four levels at which a scan skips data, file and partition sizing with the small-file problem, schema evolution, and table formats (Delta Lake, Iceberg, Hudi) as metadata layers outside the Spark baseline.
+- Added a versioned SVG asset `assets/parquet-layout.svg` (row groups, per-column chunks with pages and min/max, footer read first) rendered through `scripts/build.py` with alt text and a caption, modeled on the supplied layout diagram. Added thirteen file-format practice questions (`format-*`, `collection: "file-formats"`) mapped to the new lesson, each with versioned references, a review date, and the 3.5.7 baseline.
+- Checker extensions: a question `topic` now resolves against lessons or `content/question-topics.json`; questions validate `collection`; approved sources add the official documentation of the Apache Parquet, ORC, Avro, and Iceberg projects and the Delta Lake project alongside versioned Spark docs and `apache/spark` source. The README records the policy.
+- Claims checked against the Parquet project's file-format and encoding pages (single-pass writing, metadata read first, encodings, bloom filters), the Spark 3.5.7 Parquet/ORC/Avro data-source guides, the SQL tuning guide, the Iceberg table spec, and the Delta Lake documentation. The example was not executed in Spark on this machine; the lesson page says so.
+
+## Checks
+
+- `npm run build` and `npm run check`: 17 pages, 719 local links/assets, 13 lesson schemas and example syntax, 42 questions, three prediction exercises; JavaScript syntax pass; `git diff --check` clean.
+- `python3 scripts/browser_test.py`: 73 checks pass with the 17-page site, including the new diagram render, the storage search result, and the lesson's disclosure.
+- axe-core 4.10.2 on `storage-formats.html`: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/storage-formats-*.png`, `storage-parquet-diagram.png`).
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
