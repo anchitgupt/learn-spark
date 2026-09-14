@@ -123,3 +123,10 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - The 46-check Playwright browser pass was not run again for this batch; the changed output is covered by `scripts/check.py`.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `a20f9b8d59ef5caf4c97dff95e2b1aaf55f152d9` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34816426019](https://github.com/anchitgupt/learn-spark/actions/runs/34816426019) completed successfully.
+- All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
+- Live question bank: https://anchitgupt.github.io/learn-spark/questions.html
