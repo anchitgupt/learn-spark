@@ -172,3 +172,9 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - New-machine setup: `python3 -m pip install playwright` and `python3 -m playwright install chromium`; an installed Chrome is used as a fallback.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `fb32a203f32ffa5bf333cec6ee6ab3721671855b` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34819485811](https://github.com/anchitgupt/learn-spark/actions/runs/34819485811) completed successfully.
+- All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment; this change adds repository tooling and documentation only, so the published site is unchanged.
