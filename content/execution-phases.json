@@ -1,0 +1,56 @@
+[
+  {
+    "title": "Submit & initialize",
+    "owner": "Driver-side program",
+    "state": "Application context",
+    "detail": "Submission determines driver placement. Driver-side code creates or reuses the classic session and context.",
+    "data": "Source data remains in storage. Startup is not a scan of the whole dataset.",
+    "evidence": "Check deploy mode and the application identity; an attached notebook may already be initialized.",
+    "anchor": "startup"
+  },
+  {
+    "title": "Acquire executors",
+    "owner": "Cluster integration + executors",
+    "state": "Available compute",
+    "detail": "Resource allocation launches executor processes; executors register with the driver and become available for scheduling.",
+    "data": "Data is still at its source. Adding compute does not imply all data is loaded into executor memory.",
+    "evidence": "Check the Executors tab and resource requests. Dynamic allocation means executor count can change.",
+    "anchor": "startup"
+  },
+  {
+    "title": "Describe & plan",
+    "owner": "Driver · Spark SQL",
+    "state": "Logical → physical representations",
+    "detail": "Expressions describe the query. Analysis resolves references; optimization and physical planning are demanded when needed, including by plan inspection or an action.",
+    "data": "Metadata or schema work can occur. Planning and full result computation are distinct.",
+    "evidence": "Compare analyzed, optimized, and physical plans with explain(\"extended\"). This step is conceptual, not a claim that planning is eager.",
+    "anchor": "planning"
+  },
+  {
+    "title": "Request & schedule",
+    "owner": "DAG scheduler → task scheduler → backend",
+    "state": "Jobs → stages → task attempts",
+    "detail": "An action requests a result. DAG scheduling creates stage task sets; task scheduling assigns attempts to available executor resources.",
+    "data": "Tasks are ready to read or reuse the inputs they need. The cluster manager does not relay every task.",
+    "evidence": "Follow the SQL execution to its jobs and stage tasks. Partition count is not the count of concurrent task slots.",
+    "anchor": "scheduling"
+  },
+  {
+    "title": "Execute & exchange",
+    "owner": "Executor tasks · adaptive planning on driver",
+    "state": "Operators, partial results, shuffle blocks",
+    "detail": "Tasks process partitions and produce shuffle output when the physical plan requires it. Downstream work fetches and combines it; AQE can adapt using runtime statistics.",
+    "data": "Data travels through executor operators and, for a shuffle, local or remote blocks. Different keys can share a hash partition.",
+    "evidence": "Inspect shuffle read/write, spills, task sizes, and the final adaptive plan. A broadcast exchange is a different operation.",
+    "anchor": "execution"
+  },
+  {
+    "title": "Complete or recover",
+    "owner": "Executors + driver",
+    "state": "Output, status, or retry",
+    "detail": "Task status and metrics are tracked throughout execution. Recoverable failures can be retried; successful work returns results or commits output.",
+    "data": "Display/collect results reach the driver. File output is normally written from executors; the driver coordinates completion.",
+    "evidence": "Check completion and sink output. A finished query does not necessarily end the application.",
+    "anchor": "finish"
+  }
+]

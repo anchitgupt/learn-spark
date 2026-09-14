@@ -322,5 +322,175 @@
     ],
     "reviewed": "2026-09-13",
     "version": "Apache Spark 3.5.7"
+  },
+  {
+    "slug": "execution-flow",
+    "title": "The complete Spark execution flow",
+    "dek": "From spark-submit to the final result: explain who does what, when, and why.",
+    "minutes": 18,
+    "idea": "Tell two connected stories: how the application gets compute, and how a query turns a plan into work on that compute.",
+    "sections": [
+      {
+        "id": "scope",
+        "title": "Before you draw the flow",
+        "body": "<p>Open with a scope statement: <strong>“I’ll describe a classic PySpark batch application using DataFrames on Spark 3.5.7.”</strong> Then separate the application’s lifetime from the execution of an individual query. One application can run many queries and jobs.</p><p>This matters in interviews: a notebook may already have a session and compute attached. With Spark Connect, a client sends plans to a remote server; the Python client is not the classic driver described below. Structured Streaming adds a continuously running query and its own execution lifecycle.</p><p>Learn the eight fundamentals first if the terms are new. This is the capstone that connects them.</p><p class=\"section-source\">Check the source: <a href=\"#source-connect\">Spark Connect has a separate client/server architecture</a> · <a href=\"#source-cluster\">Application components and resource allocation</a></p>"
+      },
+      {
+        "id": "startup",
+        "title": "1–4 · Start the application",
+        "body": "<ol class=\"numbered-flow\" start=\"1\"><li><strong>Submit the program.</strong> A command such as <code>spark-submit app.py</code> launches the application using its master and deployment configuration. In client mode the driver runs on the submitting side; in cluster mode the cluster infrastructure launches it. The deployment mode determines driver placement.</li><li><strong>Initialize or reuse the session.</strong> Driver-side code obtains a <code>SparkSession</code>. In classic Spark, it uses a <code>SparkContext</code> for the application’s connection and scheduling machinery. <code>getOrCreate()</code> may return an existing session; it is not a command that always launches a fresh driver.</li><li><strong>Acquire executor resources.</strong> Cluster-manager-specific integration requests resources. YARN, Kubernetes, and Spark standalone are common choices; Mesos is deprecated in this reference release. Executors are processes, not synonyms for worker machines. Memory requests also have overhead beyond the configured executor heap.</li><li><strong>Register and become schedulable.</strong> Executors connect back to the driver. Resource availability and readiness settings affect when scheduling begins. There is no universal rule that every requested executor must exist before work can start. Dynamic allocation can add or remove executors later.</li></ol><p>In local mode, task threads run locally; there is no remote cluster-manager allocation of three separate executors. In an already attached notebook, much of this startup may have happened before your cell ran.</p><p class=\"section-source\">Check the source: <a href=\"#source-submit\">Driver placement and spark-submit</a> · <a href=\"#source-session\">SparkSession.getOrCreate: create or reuse</a> · <a href=\"#source-cluster\">Application components and resource allocation</a> · <a href=\"#source-allocation\">Scheduling and dynamic resource allocation</a> · <a href=\"#source-config\">Task CPUs, registration readiness, and retry configuration</a></p>"
+      },
+      {
+        "id": "planning",
+        "title": "5–8 · Describe the query and plan it",
+        "body": "<ol class=\"numbered-flow\" start=\"5\"><li><strong>Run the driver-side program.</strong> Python control flow executes normally. Reading a table and building expressions such as <code>filter</code> and <code>groupBy</code> describe a distributed computation. Metadata discovery, schema inference, and analysis can already do work or report errors.</li><li><strong>Analyze the logical plan.</strong> Spark SQL resolves references to columns, relations, functions, and types. “Aggregate over a filter over an input relation” describes the requested result. A logical input relation is not yet a physical <code>FileScan</code> operator.</li><li><strong>Optimize the logical plan.</strong> Applicable rules simplify expressions and reduce unnecessary work. Column pruning and eligible filter pushdown are useful examples. Pushdown depends on the source and predicate; a remaining filter may still need to run. Join reordering and strategy choices have eligibility, statistics, and configuration requirements.</li><li><strong>Choose and prepare physical operators.</strong> The physical plan specifies how to compute the result: scans, filters, partial/final aggregates, joins, and exchanges. Eligible operators can be fused into generated code. That fusion is distinct from a scheduler stage.</li></ol><div class=\"core-idea\"><p>These are <strong>conceptual planning phases, not an eager timeline for every transformation</strong>. Query execution holds lazily evaluated planning results; an action or plan inspection can demand them. <code>explain(\"extended\")</code> lets you inspect the representations before requesting result rows.</p></div><p>Catalyst plans structured queries. The DAG scheduler later works with execution dependencies; it does not schedule the Catalyst logical tree directly. Ordinary RDD transformations do not go through the same DataFrame/SQL optimization pipeline.</p><p class=\"section-source\">Check the source: <a href=\"#source-query\">QueryExecution: analysis, optimization, physical planning</a> · <a href=\"#source-explain\">Reading EXPLAIN output</a> · <a href=\"#source-strategies\">Physical strategy selection and join eligibility</a></p>"
+      },
+      {
+        "id": "scheduling",
+        "title": "9–11 · Request results and schedule work",
+        "body": "<ol class=\"numbered-flow\" start=\"9\"><li><strong>Call an action.</strong> <code>show()</code>, <code>count()</code>, <code>collect()</code>, or an actual write operation asks for an outcome. Accessing <code>df.write</code> alone only creates a writer. Necessary planning is completed and execution work is submitted. One user action can lead to multiple scheduler jobs; query execution and job are different levels.</li><li><strong>Build the stage dependencies and tasks.</strong> The DAG scheduler identifies shuffle dependencies and available intermediate results. For a runnable stage attempt, it creates the required tasks and submits them as a <code>TaskSet</code>. A <code>ShuffleMapStage</code> produces shuffle output; a <code>ResultStage</code> produces the result requested by that job.</li><li><strong>Place task attempts on executors.</strong> The task scheduler uses resource offers, locality preferences, scheduling policy, and task resource requirements. The scheduler backend dispatches the selected work to executors. The cluster manager supplies resources; it is not an obligatory relay for each task or each data row.</li></ol><p>Say <strong>“one task per partition to compute in that stage attempt”</strong>, not “one task per original file.” Some actions need only a subset of partitions. Retries and speculation create additional attempts, and downstream partition counts can change.</p><div class=\"table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Task slot examples\"><table><caption>CPU-only illustration: three executors, four available cores each</caption><thead><tr><th>Task CPU request</th><th>Available task slots</th><th>16 ready tasks need at least</th></tr></thead><tbody><tr><td><code>spark.task.cpus = 1</code></td><td>3 × floor(4 / 1) = 12</td><td>2 waves</td></tr><tr><td><code>spark.task.cpus = 2</code></td><td>3 × floor(4 / 2) = 6</td><td>3 waves</td></tr></tbody></table></div><p>This is a capacity model, not a timing promise. Other resources, competing jobs, skew, and task durations matter. Tasks run on executor threads; Spark does not permanently pin a partition to a physical CPU core.</p><p class=\"section-source\">Check the source: <a href=\"#source-rdd\">Actions, lazy transformations, and recomputation</a> · <a href=\"#source-dag\">DAGScheduler: stages, tasks, TaskSets, and recovery</a> · <a href=\"#source-tasks\">TaskSchedulerImpl: task placement and resource offers</a> · <a href=\"#source-config\">Task CPUs, registration readiness, and retry configuration</a></p>"
+      },
+      {
+        "id": "execution",
+        "title": "12–14 · Process partitions and shuffle",
+        "body": "<ol class=\"numbered-flow\" start=\"12\"><li><strong>Execute the task’s computation.</strong> An executor deserializes task information and processes the assigned execution partition. Pipelined operators can read, filter, project, and partly aggregate within one task. Built-in SQL expressions run through Spark’s execution engine; Python UDFs can involve Python worker processes.</li><li><strong>Produce and fetch shuffle blocks when required.</strong> For a grouped sum, map-side tasks may first produce partial sums. A shuffle exchange distributes these by key. The same key must reach compatible downstream grouping, but multiple distinct keys can share a hash partition. Downstream tasks fetch the required blocks, locally or remotely.</li><li><strong>Run downstream operators; adapt when applicable.</strong> Once dependencies are available, downstream tasks complete the aggregation. With AQE enabled, materialized exchange statistics can inform changes such as coalescing shuffle partitions or selecting a different supported join strategy. Initial and final plans can differ.</li></ol><p>Shuffle can involve serialization, disk I/O, network I/O, and spill. A network transfer is not required for every block. <code>BroadcastExchange</code> instead prepares and distributes a broadcast relation; treating every operator containing “Exchange” as a shuffle is inaccurate.</p><p>Locality tries to avoid avoidable movement. <code>PROCESS_LOCAL</code>, <code>NODE_LOCAL</code>, <code>RACK_LOCAL</code>, and <code>ANY</code> describe locality choices; <code>NO_PREF</code> means there is no locality preference. Object-storage reads do not imply that an executor lives beside an HDFS block.</p><p class=\"section-source\">Check the source: <a href=\"#source-shuffle\">Shuffle dependencies and output partitioning</a> · <a href=\"#source-broadcast\">BroadcastExchange is a different exchange</a> · <a href=\"#source-aqe\">Adaptive query execution and shuffle partition coalescing</a> · <a href=\"#source-locality\">Data locality and its trade-offs</a></p><p>An AQE query stage is a physical-plan unit around an exchange; a whole-stage codegen region is an operator-fusion unit. Neither is interchangeable with a DAG scheduler stage in the Jobs/Stages UI. <a href=\"#source-querystage\">See the AQE query-stage implementation</a>.</p>"
+      },
+      {
+        "id": "finish",
+        "title": "15–17 · Observe, recover, and finish",
+        "body": "<ol class=\"numbered-flow\" start=\"15\"><li><strong>Track progress throughout execution.</strong> Task status updates and metrics feed the driver’s view of the application. Use the SQL tab for query plans and linked jobs; use stage/task views for skew, shuffle, spill, duration, and GC evidence. The Storage tab concerns materialized persisted data.</li><li><strong>Recover eligible failures.</strong> A failed task attempt may be retried within configured limits. Lost shuffle output can require recomputation of earlier work. Recovery needs available inputs and recomputable logic; a deterministic code error will not be repaired by simply retrying it. Driver failure is a different lifecycle problem, not a task retry.</li><li><strong>Return or commit the output.</strong> <code>show()</code> brings back enough rows to display, although computing those rows can require substantial upstream work. <code>collect()</code> returns all result rows to the driver. Distributed file writes normally write data from executors and coordinate commits; output data need not pass through the driver. One executor does not imply one output file. The application can accept another action, or terminate and release resources.</li></ol><p>Do not claim that external side effects happen exactly once merely because Spark retries tasks. Side-effect safety and a sink’s commit guarantees need their own design. Do not stop a shared notebook session just because one query has finished.</p><p class=\"section-source\">Check the source: <a href=\"#source-ui\">SQL, Jobs, Stages, Executors, and Storage tabs</a> · <a href=\"#source-dag\">DAGScheduler: stages, tasks, TaskSets, and recovery</a> · <a href=\"#source-rdd\">Actions, lazy transformations, and recomputation</a></p>"
+      },
+      {
+        "id": "trace-example",
+        "title": "Trace the example before running it",
+        "body": "<p>The runnable example below creates 12 rows in four input partitions. Each ID determines a country and an amount. Filtering <code>amount &gt; 100</code> keeps IDs 3–11. Here is the input-side arithmetic:</p><div class=\"table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Example input partition trace\"><table><caption>Initial range partitions and surviving amounts</caption><thead><tr><th>Partition</th><th>Input IDs</th><th>After the filter</th></tr></thead><tbody><tr><td>P0</td><td>0, 1, 2</td><td>No surviving rows</td></tr><tr><td>P1</td><td>3, 4, 5</td><td>India 150 · USA 200 · UK 250</td></tr><tr><td>P2</td><td>6, 7, 8</td><td>India 300 · USA 350 · UK 400</td></tr><tr><td>P3</td><td>9, 10, 11</td><td>India 450 · USA 500 · UK 550</td></tr></tbody></table></div><p>In a typical full-input execution, each input partition needs a task, even P0: Spark must evaluate its rows before knowing none survive. Partial sums can be shuffled and merged to produce <strong>India 900, USA 1050, UK 1200</strong>. The output order is unspecified.</p><div class=\"code-block\"><div><span>CONCEPTUAL PHYSICAL FLOW · READ TOP TO BOTTOM</span></div><pre><code>Range (4 input partitions)\n  → Filter amount &gt; 100\n  → Partial aggregate by country\n  → Shuffle exchange by country\n  → Final aggregate\n  → Display a small result</code></pre></div><p>This sketches the aggregation’s shuffle boundary, not an assertion that <code>show()</code> must produce exactly one job and two stages. AQE and result retrieval influence the observed scheduler work. <code>spark.sql.shuffle.partitions</code> does not define the four input partitions in this example.</p><p>For your Parquet version, replace the generated input with <code>spark.read.parquet(\"/orders\")</code>. Inspect the actual scan and partitioning instead of assuming one input file means one task. Look for pushed filters and selected columns; do not expect a literal operator-for-operator match with this range example.</p><p class=\"section-source\">Check the source: <a href=\"#source-explain\">Reading EXPLAIN output</a> · <a href=\"#source-shuffle\">Shuffle dependencies and output partitioning</a> · <a href=\"#source-aqe\">Adaptive query execution and shuffle partition coalescing</a></p>"
+      },
+      {
+        "id": "interview-method",
+        "title": "A repeatable way to answer in an interview",
+        "body": "<ol><li><strong>Scope it.</strong> State classic PySpark or Spark Connect, batch or streaming, and whether the application is already running.</li><li><strong>Draw the roles.</strong> Put the driver beside the cluster manager and executors. Show resource allocation separately from task dispatch and data access.</li><li><strong>Walk the query.</strong> Use one scan → filter → grouped sum → action example. Identify what is a plan and what actually processes data.</li><li><strong>Explain the expensive boundary.</strong> Draw the partial aggregate, shuffle write/read, and final aggregate. Say what crosses the boundary.</li><li><strong>Size the work with assumptions.</strong> Separate input partitions, shuffle partitions, task attempts, and concurrent slots. Then discuss skew and retries.</li><li><strong>Verify the story.</strong> Name the plan operator or Spark UI evidence you would inspect. Finish with where the result goes and whether the application stays alive.</li></ol><p>Practice at two depths: give the answer below in roughly 90 seconds, then walk through the example when the interviewer asks for detail. Avoid reciting 17 steps without explaining who owns each step.</p><p class=\"section-source\">Check the source: <a href=\"#source-ui\">SQL, Jobs, Stages, Executors, and Storage tabs</a></p>"
+      },
+      {
+        "id": "corrections",
+        "title": "Corrections to the supplied explanation",
+        "body": "<p>The supplied answer is a useful starting outline. These changes make it safer to use as an interview explanation:</p><div class=\"table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Corrections to common Spark flow claims\"><table><thead><tr><th>Shortcut in the draft</th><th>More accurate explanation</th></tr></thead><tbody><tr><td>Session/context → driver starts</td><td>The driver-side program creates or reuses the classic session/context. Driver placement comes from deployment mode; attached notebooks may already have it.</td></tr><tr><td>Nothing runs until an action</td><td>Result computation is generally lazy. Python code, metadata work, and analysis can run earlier; plan inspection can demand planning.</td></tr><tr><td>Every transformation produces a physical plan immediately</td><td>Logical expressions are composed; analysis, optimization, and physical planning are requested as needed.</td></tr><tr><td>Task scheduler creates the tasks</td><td>DAG scheduling creates the tasks and TaskSet for a stage attempt. Task scheduling places and manages task attempts.</td></tr><tr><td>One action → one job</td><td>A useful first approximation, not a count guarantee. SQL actions can involve multiple jobs.</td></tr><tr><td>Exchange → shuffle</td><td>Distinguish shuffle exchanges from broadcast exchanges.</td></tr><tr><td>join is always wide; withColumn is always narrow</td><td>Inspect required physical distribution. Broadcast joins can avoid shuffling the large side; a window expression introduced with withColumn can require redistribution.</td></tr><tr><td>Core → one task</td><td>Task slots depend on CPU/resource requests and available resources. The default CPU request is one; it is configurable.</td></tr><tr><td>Each distinct key gets its own partition</td><td>Hash partitioning places the same key compatibly, but different keys may share a partition.</td></tr><tr><td>The selected physical plan never changes</td><td>AQE can revise parts of the plan using runtime statistics.</td></tr></tbody></table></div><p>Keep the relationships, but say them precisely: <strong>action requests results; shuffle dependencies separate scheduler stages; tasks compute stage partitions; resource slots bound concurrency; executors run task attempts.</strong></p><p class=\"section-source\">Check the source: <a href=\"#source-session\">SparkSession.getOrCreate: create or reuse</a> · <a href=\"#source-query\">QueryExecution: analysis, optimization, physical planning</a> · <a href=\"#source-dag\">DAGScheduler: stages, tasks, TaskSets, and recovery</a> · <a href=\"#source-tasks\">TaskSchedulerImpl: task placement and resource offers</a> · <a href=\"#source-broadcast\">BroadcastExchange is a different exchange</a> · <a href=\"#source-strategies\">Physical strategy selection and join eligibility</a> · <a href=\"#source-config\">Task CPUs, registration readiness, and retry configuration</a> · <a href=\"#source-aqe\">Adaptive query execution and shuffle partition coalescing</a></p><p class=\"section-source\">Further checks: <a href=\"#source-window\">Window distribution requirements</a> · <a href=\"#source-take\">Incremental result retrieval</a></p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\n\n# Uses an existing classic SparkSession named spark.\norders = (\n    spark.range(0, 12, 1, 4)\n    .withColumn(\"country\",\n        F.when(F.col(\"id\") % 3 == 0, \"India\")\n         .when(F.col(\"id\") % 3 == 1, \"USA\")\n         .otherwise(\"UK\"))\n    .withColumn(\"amount\", F.col(\"id\") * 50)\n)\nresult = (\n    orders.filter(F.col(\"amount\") > 100)\n    .groupBy(\"country\")\n    .agg(F.sum(\"amount\").alias(\"total\"))\n)\n\nresult.explain(\"extended\")  # inspect plans, not result rows\nresult.show(truncate=False) # request the result\n",
+    "output": "India: 900 · USA: 1050 · UK: 1200. Row order is unspecified. Actual job/stage counts must be observed in the Spark UI.",
+    "pitfall": "The physical plan, scheduler-stage graph, and task-attempt timeline are different views. Do not infer exact job counts from source lines, or exact concurrency from partition counts.",
+    "question": "Can you explain the full Spark flow, from application startup to the final result?",
+    "answer": "For a classic PySpark batch application, submission and deploy mode determine where the driver runs. Driver-side code creates or reuses a SparkSession and SparkContext, and cluster integration obtains executors that register with the driver. DataFrame operations describe a logical query; Spark SQL analyzes it and, when needed, optimizes and plans physical execution. An action requests results and can trigger multiple jobs. The DAG scheduler separates execution dependencies at shuffle boundaries and creates tasks for runnable stage partitions. The task scheduler places task attempts on available executor resources through its backend. Executors run operators, may partly aggregate, and exchange data when the plan requires it. AQE can adjust downstream execution using runtime statistics. Status and metrics return to the driver, recoverable failures can be retried, and the output is returned to the driver or written to storage. The application can then run more work or shut down.",
+    "sources": [
+      {
+        "id": "submit",
+        "title": "Driver placement and spark-submit",
+        "url": "https://spark.apache.org/docs/3.5.7/submitting-applications.html"
+      },
+      {
+        "id": "session",
+        "title": "SparkSession.getOrCreate: create or reuse",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.SparkSession.builder.getOrCreate.html"
+      },
+      {
+        "id": "cluster",
+        "title": "Application components and resource allocation",
+        "url": "https://spark.apache.org/docs/3.5.7/cluster-overview.html"
+      },
+      {
+        "id": "connect",
+        "title": "Spark Connect has a separate client/server architecture",
+        "url": "https://spark.apache.org/docs/3.5.7/spark-connect-overview.html"
+      },
+      {
+        "id": "query",
+        "title": "QueryExecution: analysis, optimization, physical planning",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/QueryExecution.scala"
+      },
+      {
+        "id": "explain",
+        "title": "Reading EXPLAIN output",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-explain.html"
+      },
+      {
+        "id": "strategies",
+        "title": "Physical strategy selection and join eligibility",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala"
+      },
+      {
+        "id": "dag",
+        "title": "DAGScheduler: stages, tasks, TaskSets, and recovery",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      },
+      {
+        "id": "tasks",
+        "title": "TaskSchedulerImpl: task placement and resource offers",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/TaskSchedulerImpl.scala"
+      },
+      {
+        "id": "config",
+        "title": "Task CPUs, registration readiness, and retry configuration",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "id": "allocation",
+        "title": "Scheduling and dynamic resource allocation",
+        "url": "https://spark.apache.org/docs/3.5.7/job-scheduling.html"
+      },
+      {
+        "id": "locality",
+        "title": "Data locality and its trade-offs",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html#data-locality"
+      },
+      {
+        "id": "shuffle",
+        "title": "Shuffle dependencies and output partitioning",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/ShuffleExchangeExec.scala"
+      },
+      {
+        "id": "broadcast",
+        "title": "BroadcastExchange is a different exchange",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala"
+      },
+      {
+        "id": "aqe",
+        "title": "Adaptive query execution and shuffle partition coalescing",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#adaptive-query-execution"
+      },
+      {
+        "id": "rdd",
+        "title": "Actions, lazy transformations, and recomputation",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      },
+      {
+        "id": "ui",
+        "title": "SQL, Jobs, Stages, Executors, and Storage tabs",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "id": "window",
+        "title": "Window expressions have distribution requirements",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/window/WindowExecBase.scala"
+      },
+      {
+        "id": "take",
+        "title": "SparkPlan result retrieval and incremental take",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkPlan.scala"
+      },
+      {
+        "id": "querystage",
+        "title": "AQE query stages are physical-plan units",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/QueryStageExec.scala"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7 · classic PySpark batch",
+    "walkthrough": "execution",
+    "related": [
+      "architecture",
+      "lazy-evaluation",
+      "jobs-stages-tasks",
+      "partitions-shuffles"
+    ]
   }
 ]

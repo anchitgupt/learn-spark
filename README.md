@@ -15,9 +15,10 @@ Open http://127.0.0.1:4173. Alternatively, `npm run dev` builds and serves the s
 
 ## What's included
 
-- Eight linked fundamentals lessons: Spark's purpose, architecture, DataFrames/RDDs/SQL, lazy evaluation, jobs/stages/tasks, partitions/shuffles, joins/skew, and caching/recovery.
+- Nine linked lessons: eight fundamentals plus a complete execution-flow capstone connecting startup, planning, scheduling, shuffles, recovery, and output.
 - Original small PySpark examples, expected results, pitfalls, and interview explanations.
-- Eight authored practice prompts with filters and revealable reasoning; they are not represented as real interview reports.
+- Twelve interview prompts: one question reported by Anchit and eleven authored practice prompts, clearly labeled with their provenance.
+- A six-phase interactive execution walkthrough with a full static reading fallback and a diagram separating resource allocation, task dispatch, and data movement.
 - SVG architecture and partition diagrams; a canvas shuffle/filter walkthrough; an original 12-second H.264 explainer with captions and a transcript.
 - Search, completion tracking, and a personal interview notebook with add/edit/delete and JSON import/export.
 - Readable static lessons and questions when JavaScript is disabled; mobile navigation and keyboard controls.
@@ -29,7 +30,9 @@ Edit `content/lessons.json` for the published curriculum. Each lesson has a stab
 - Section `body` is trusted HTML maintained in the repository. Keep it semantic: paragraphs, lists, inline code, and links. Do not insert unreviewed third-party HTML.
 - `code` is a plain-text PySpark snippet; the generator escapes it automatically.
 - Add source title/URL pairs, the Spark runtime version, and the actual review date. Do not advance the review date without checking the explanation.
-- Update the overview/sidebar counts in `scripts/build.py` if extending beyond the initial eight-lesson chapter. Preserve existing slugs so links and saved notes remain valid.
+- Overview, sidebar, question, and progress totals are derived from content. Preserve existing slugs so links and saved notes remain valid. Sections may specify stable `id` values; sources may specify `id` values for inline source references.
+- The capstone phase summaries live in `content/execution-phases.json` and render through `scripts/flow.py`. Each phase links to a full lesson section.
+- Question `origin` is `reported` only for a user-reported interview question; otherwise use `practice`. Adding authored follow-ups does not make them reported questions.
 - `content/questions.json` holds published practice questions. Each question references a lesson slug and has a stable ID, type, question, answer, follow-up, and provenance.
 - Run `python3 scripts/build.py` and `npm run check` after changes. `_site/` is generated output, not the authoring source.
 
@@ -37,7 +40,7 @@ For a new interview question, use **My notebook**. Saved questions are browser-l
 
 ## Verification policy
 
-The initial content uses **Apache Spark 3.5.7 as an explicit reference baseline**, not as a claim about the newest release. Core explanations were reviewed against versioned official documentation on 2026-09-13. Other Spark releases, Spark Connect, and managed distributions can behave differently.
+The initial content uses **Apache Spark 3.5.7 as an explicit reference baseline**, not as a claim about the newest release. Each lesson records its review date. The original fundamentals were checked on 2026-09-13; the complete-flow lesson was checked against official documentation and versioned Apache Spark source on 2026-09-14. Other Spark releases, Spark Connect, and managed distributions can behave differently.
 
 PySpark examples are syntax-checked, with expected results reasoned from their small inputs. They have **not been executed in a Spark runtime** on this machine. Before promoting new code as runtime-verified, run it on the stated version and record the observed result. The lab and video are conceptual models, not a real scheduler or a performance benchmark.
 
@@ -50,6 +53,12 @@ For each new claim:
 5. Check that the interview answer preserves those qualifications.
 
 The private ChatGPT conversation URL supplied at project creation was not accessible. Its contents have not been imported or invented.
+
+## Format for interview walkthroughs
+
+Use the complete-flow capstone as the model for future questions: state the scope, give a concise spoken answer, trace the steps with component responsibilities and data location, work one small example, explain the assumptions, and link evidence. Distinguish a logical/physical query plan from scheduler jobs, stages, and task attempts. Include a concrete Spark UI observation when the answer depends on runtime behavior.
+
+Treat pasted AI answers as drafts to verify. Preserve the question's provenance, correct oversimplifications explicitly, and never imply that source review is a successful runtime test.
 
 ## Notebook backups and limitations
 

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" role="img" aria-labelledby="title desc">
+  <title id="title">Resource allocation, task dispatch, and data movement</title>
+  <desc id="desc">A driver contains SQL planning and schedulers. The cluster manager allocates executor resources, shown by dashed lines. The driver dispatches tasks directly to executors, shown by rust arrows. Executors exchange shuffle data and access storage, shown by green arrows. Data does not pass through the cluster manager.</desc>
+  <defs>
+    <marker id="control-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="#ae4427"/></marker>
+    <marker id="data-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto-start-reverse"><path d="M0 0L6 3L0 6" fill="#527966"/></marker>
+    <marker id="resource-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto"><path d="M0 0L6 3L0 6" fill="#7c8173"/></marker>
+  </defs>
+  <rect width="900" height="560" fill="#f8f7f3"/>
+  <g fill="none" stroke-width="2">
+    <path d="M460 100H590" stroke="#7c8173" stroke-dasharray="6 5" marker-end="url(#resource-arrow)"/>
+    <path d="M720 165V198H870V270H740V294M870 245H455V294M455 245H165V294" stroke="#7c8173" stroke-dasharray="6 5" marker-end="url(#resource-arrow)"/>
+    <path d="M260 165V218H125V294M260 218H415V294M415 218H700V294" stroke="#ae4427" marker-end="url(#control-arrow)"/>
+    <path d="M280 345H330M570 345H620" stroke="#527966" marker-start="url(#data-arrow)" marker-end="url(#data-arrow)"/>
+    <path d="M165 400V465H335M450 400V440M735 400V465H565" stroke="#527966" marker-start="url(#data-arrow)" marker-end="url(#data-arrow)"/>
+  </g>
+  <g font-family="sans-serif" fill="#29332e">
+    <rect x="40" y="35" width="420" height="130" rx="6" fill="#f3e7de" stroke="#ae4427"/>
+    <text x="62" y="66" font-size="21">Driver</text>
+    <text x="62" y="95" font-size="14">SparkSession / SparkContext (classic Spark)</text>
+    <text x="62" y="120" font-size="14">SQL planning · DAG scheduler · task scheduler</text>
+    <text x="62" y="144" font-size="14">Scheduler backend · results and metrics</text>
+    <rect x="590" y="35" width="270" height="130" rx="6" fill="#eeeee6" stroke="#7c8173"/>
+    <text x="612" y="70" font-size="21">Cluster manager</text>
+    <text x="612" y="102" font-size="14">YARN / Kubernetes / standalone</text>
+    <text x="612" y="133" font-size="14">Allocates executor resources</text>
+    <text x="476" y="87" font-size="12">resource</text><text x="476" y="119" font-size="12">integration</text>
+    <text x="50" y="208" font-size="13" fill="#ae4427">Task dispatch</text>
+    <text x="555" y="239" font-size="12" fill="#656d5f">Resource allocation is a separate path</text>
+    <g fill="#e9ede3" stroke="#78896c"><rect x="40" y="295" width="240" height="105" rx="6"/><rect x="330" y="295" width="240" height="105" rx="6"/><rect x="620" y="295" width="240" height="105" rx="6"/></g>
+    <text x="62" y="326" font-size="19">Executor A</text><text x="352" y="326" font-size="19">Executor B</text><text x="642" y="326" font-size="19">Executor C</text>
+    <text x="62" y="357" font-size="14">Task threads · cache</text><text x="352" y="357" font-size="14">Task threads · cache</text><text x="642" y="357" font-size="14">Task threads · cache</text>
+    <text x="62" y="383" font-size="14">Shuffle blocks</text><text x="352" y="383" font-size="14">Shuffle blocks</text><text x="642" y="383" font-size="14">Shuffle blocks</text>
+    <rect x="335" y="440" width="230" height="52" rx="6" fill="#fffefa" stroke="#527966"/><text x="372" y="472" font-size="18">External storage</text>
+    <text x="40" y="537" font-size="13" fill="#ae4427">Rust: task control</text><text x="244" y="537" font-size="13" fill="#527966">Green: data access / shuffle</text><text x="537" y="537" font-size="13" fill="#656d5f">Dashed: resource allocation</text>
+  </g>
+</svg>

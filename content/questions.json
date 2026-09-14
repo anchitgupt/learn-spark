@@ -70,5 +70,45 @@
     "answer": "No. Identify repeated expensive computation, memory capacity, and reuse lifetime. Caching one-use intermediates can add overhead and pressure. Measure, inspect storage, and unpersist deliberately.",
     "followup": "Which Spark UI metric or plan operator would you inspect?",
     "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "flow-reported",
+    "topic": "execution-flow",
+    "type": "Concept",
+    "origin": "reported",
+    "question": "Can you explain the full Spark flow, from application startup to the final result?",
+    "answer": "For a classic PySpark batch application, submission and deploy mode determine where the driver runs. Driver-side code creates or reuses a SparkSession and SparkContext, and cluster integration obtains executors that register with the driver. DataFrame operations describe a logical query; Spark SQL analyzes it and, when needed, optimizes and plans physical execution. An action requests results and can trigger multiple jobs. The DAG scheduler separates execution dependencies at shuffle boundaries and creates tasks for runnable stage partitions. The task scheduler places task attempts on available executor resources through its backend. Executors run operators, may partly aggregate, and exchange data when the plan requires it. AQE can adjust downstream execution using runtime statistics. Status and metrics return to the driver, recoverable failures can be retried, and the output is returned to the driver or written to storage. The application can then run more work or shut down.",
+    "followup": "Use one grouped-sum example. Identify the driver, plan, shuffle boundary, tasks, and destination of the output.",
+    "source": "Interview question reported by Anchit; wording normalized from the supplied question. Answer reviewed against the linked Spark 3.5.7 sources on 2026-09-14."
+  },
+  {
+    "id": "flow-action-jobs",
+    "topic": "execution-flow",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "I called show() once but the Spark UI lists several jobs. Is something wrong?",
+    "answer": "Not necessarily. A user-level SQL action is not a promise of one scheduler job. Broadcast preparation, adaptive execution, or incremental result retrieval can lead to extra work. Start with the SQL execution and its linked jobs, then read the executed plan.",
+    "followup": "How would you separate the SQL query, job, scheduler stage, and task attempt?",
+    "source": "Authored follow-up practice; not reported as an actual interview question."
+  },
+  {
+    "id": "flow-task-slots",
+    "topic": "execution-flow",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Three executors have four cores each. With spark.task.cpus=2, can 12 tasks run at once?",
+    "answer": "In a CPU-only model with all 12 executor cores available, each four-core executor offers floor(4 / 2) = 2 task slots, so six task attempts can run concurrently. Ready tasks, other resource requirements, and competing work can reduce that number.",
+    "followup": "If there are 16 ready tasks, why is three waves only a capacity estimate rather than a runtime guarantee?",
+    "source": "Authored follow-up practice; not reported as an actual interview question."
+  },
+  {
+    "id": "flow-plan-exchange",
+    "topic": "execution-flow",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "Does every Exchange in a Spark physical plan mean a shuffle?",
+    "answer": "No. A shuffle exchange redistributes data for a required partitioning. A BroadcastExchange prepares and distributes a broadcast relation. Read the operator type and the surrounding join or aggregation, rather than counting the word Exchange.",
+    "followup": "Why might a broadcast join avoid shuffling the large side and still require a separate preparation job?",
+    "source": "Authored follow-up practice; not reported as an actual interview question."
   }
 ]

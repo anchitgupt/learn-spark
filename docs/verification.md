@@ -36,3 +36,27 @@ Visual inspection covered the desktop overview and lesson, phone overview and le
 ## Publication at initial validation
 
 At the time of the initial local validation, the directory had no git repository and `anchitgupt/learn-spark` did not resolve via `gh repo view`. Publication was subsequently authorized. Current build and deployment results are recorded in the repository's GitHub Actions runs; this document records the local checks before publication.
+
+# Execution flow update — 2026-09-14
+
+## Content and build
+
+- Added the complete execution-flow capstone, a six-phase interactive walkthrough, an original architecture diagram, one user-reported interview question, and three authored follow-ups.
+- Reviewed claims against Apache Spark 3.5.7 documentation and tagged source, including driver startup, lazy query planning, scheduler responsibilities, exchange types, task resource requests, adaptive execution, and failure handling. The lesson links its references and explains corrections to the supplied draft.
+- `npm run build`: 13 static pages generated.
+- `npm run check`: 436 local links/assets, nine lesson schemas and example syntax, 12 question records, source/search/phase anchors, and all three JavaScript files passed.
+- Independently checked the example arithmetic: India 900, USA 1050, UK 1200. Output order is unspecified. The example was not executed in Spark; documentation/source review and syntax/arithmetic checks do not constitute cluster runtime validation.
+
+## Chromium browser checks
+
+- All six phases select correctly; keyboard activation, previous/next boundaries, and phase status work.
+- Existing eight-lesson completion data resumes at the new lesson and advances from 8/9 to 9/9. Existing saved questions and answers remain intact, and the notebook includes the new topic.
+- Question provenance distinguishes one interview-reported question from 11 authored practice questions; scenario and text filters work.
+- Search finds the capstone and links directly to the reported question; Escape dismisses the dialog.
+- All 13 pages checked at 320, 390, 768, and 1280 CSS pixels: 52 combinations without document overflow.
+- Mobile navigation includes the capstone and dismisses on Escape.
+- With JavaScript disabled, all six phase panels remain readable, interactive controls are hidden, and answers remain expandable at phone width.
+- Phase controls work with reduced motion enabled. No JavaScript page errors occurred.
+- Visually inspected desktop and phone walkthrough screenshots and the architecture diagram. Screenshots remain in ignored `output/playwright/`.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

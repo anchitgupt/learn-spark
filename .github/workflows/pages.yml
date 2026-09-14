@@ -21,6 +21,7 @@ jobs:
           python3 scripts/check.py
           node --check assets/app.js
           node --check assets/lab.js
+          node --check assets/flow.js
       - uses: actions/upload-pages-artifact@v4
         if: github.event_name != 'pull_request'
         with:
