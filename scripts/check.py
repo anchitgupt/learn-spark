@@ -126,6 +126,18 @@ for q in questions:
     else:
         assert q.get('answer') and q.get('followup'), q['id'] + ': needs an answer and follow-up'
         assert all(q['answer'] != item['spoken'] for item in predictions), q['id'] + ': copies an exercise answer; reference it with "exercise"'
+guide = json.loads((ROOT / 'content/senior-interview-guide.json').read_text())
+guide_ids = []
+known_ids = {q['id'] for q in questions}
+for group in guide:
+    assert group.get('title') and group.get('items'), 'senior guide: groups need a title and items'
+    for item in group['items']:
+        assert item.get('prompt') and item.get('question'), 'senior guide: items need a prompt and question'
+        assert item['question'] in known_ids, 'senior guide: unknown question ' + item['question']
+        guide_ids.append(item['question'])
+senior = [q['id'] for q in questions if q.get('collection') == 'senior-de']
+assert set(senior) <= set(guide_ids), 'senior guide must index every senior-de question'
+assert f'{len(guide_ids)} prompts in {len(guide)} groups' in questions_page, 'questions page must show the senior guide prompt count'
 for item in json.loads((OUT / 'search.json').read_text()):
     assert not re.search(r'<[a-zA-Z/][^>]*>|&(?:[a-zA-Z]+|#\d+);', item['title'] + ' ' + item['text']), item['url'] + ': search text contains HTML markup'
     target = urlsplit(item['url'])

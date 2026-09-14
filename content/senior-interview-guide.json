@@ -1,1 +1,197 @@
-[]
+[
+  {
+    "title": "Architecture and execution",
+    "items": [
+      {
+        "prompt": "Walk me through what happens from spark-submit to results",
+        "question": "flow-reported"
+      },
+      {
+        "prompt": "Difference between a job, a stage, and a task",
+        "question": "senior-job-stage-task"
+      },
+      {
+        "prompt": "Client versus cluster deploy mode",
+        "question": "senior-deploy-mode"
+      },
+      {
+        "prompt": "What does the driver actually hold?",
+        "question": "senior-driver-state"
+      },
+      {
+        "prompt": "Narrow versus wide transformation",
+        "question": "senior-narrow-wide"
+      },
+      {
+        "prompt": "Why is Spark lazy?",
+        "question": "senior-why-lazy"
+      },
+      {
+        "prompt": "RDD versus DataFrame versus Dataset",
+        "question": "senior-rdd-df-dataset"
+      }
+    ]
+  },
+  {
+    "title": "Partitioning and shuffle",
+    "items": [
+      {
+        "prompt": "repartition versus coalesce",
+        "question": "senior-repartition-coalesce"
+      },
+      {
+        "prompt": "How do you choose a partition count?",
+        "question": "senior-partition-count"
+      },
+      {
+        "prompt": "What is spark.sql.shuffle.partitions, and why is 200 a problem?",
+        "question": "senior-shuffle-partitions"
+      },
+      {
+        "prompt": "How does a shuffle physically write and read data?",
+        "question": "senior-shuffle-write"
+      },
+      {
+        "prompt": "What throttles the shuffle fetcher?",
+        "question": "senior-fetch-throttle"
+      },
+      {
+        "prompt": "Bucketing versus partitioning",
+        "question": "senior-bucket-partition"
+      }
+    ]
+  },
+  {
+    "title": "Joins",
+    "items": [
+      {
+        "prompt": "Name the join strategies",
+        "question": "senior-join-strategies"
+      },
+      {
+        "prompt": "How does Spark decide which strategy to use?",
+        "question": "senior-join-selection"
+      },
+      {
+        "prompt": "When does broadcasting a side fail?",
+        "question": "senior-broadcast-limits"
+      },
+      {
+        "prompt": "Sort-merge join versus shuffled hash join",
+        "question": "senior-smj-shj"
+      },
+      {
+        "prompt": "Why is an outer join more expensive than an inner join?",
+        "question": "senior-outer-join"
+      },
+      {
+        "prompt": "How do you join a 10 TB fact to a 50 GB dimension?",
+        "question": "senior-large-join"
+      }
+    ]
+  },
+  {
+    "title": "Memory and OOM",
+    "items": [
+      {
+        "prompt": "Explain the executor memory layout",
+        "question": "senior-memory-layout"
+      },
+      {
+        "prompt": "Driver OOM versus executor OOM",
+        "question": "senior-driver-executor-oom"
+      },
+      {
+        "prompt": "What is spark.executor.memoryOverhead for?",
+        "question": "senior-memory-overhead"
+      },
+      {
+        "prompt": "cache() versus persist(), and the storage levels",
+        "question": "web-cache-storage-defaults"
+      },
+      {
+        "prompt": "When should you not cache?",
+        "question": "practice-cache-recovery"
+      },
+      {
+        "prompt": "What does checkpoint() do that cache() does not?",
+        "question": "web-checkpoint-vs-cache"
+      }
+    ]
+  },
+  {
+    "title": "Skew and tuning",
+    "items": [
+      {
+        "prompt": "How do you detect skew?",
+        "question": "practice-spark-ui-straggler"
+      },
+      {
+        "prompt": "How do you fix a skewed join?",
+        "question": "senior-skew-fix"
+      },
+      {
+        "prompt": "Explain salting concretely",
+        "question": "senior-salting"
+      },
+      {
+        "prompt": "A stage with 5 tasks takes hours — what do you check?",
+        "question": "senior-few-tasks"
+      },
+      {
+        "prompt": "What is spill and why does it matter?",
+        "question": "senior-spill"
+      },
+      {
+        "prompt": "When do you enable speculation?",
+        "question": "senior-speculation"
+      }
+    ]
+  },
+  {
+    "title": "Catalyst and AQE",
+    "items": [
+      {
+        "prompt": "Walk through the planning phases",
+        "question": "senior-catalyst-phases"
+      },
+      {
+        "prompt": "What is whole-stage code generation?",
+        "question": "senior-whole-stage-codegen"
+      },
+      {
+        "prompt": "What does AQE do?",
+        "question": "senior-aqe"
+      },
+      {
+        "prompt": "Why does not AQE solve everything?",
+        "question": "senior-aqe-limits"
+      },
+      {
+        "prompt": "What blocks predicate pushdown?",
+        "question": "senior-pushdown-blocks"
+      }
+    ]
+  },
+  {
+    "title": "PySpark specifics",
+    "items": [
+      {
+        "prompt": "Why are Python UDFs slow?",
+        "question": "senior-python-udf-slow"
+      },
+      {
+        "prompt": "What do pandas UDFs change?",
+        "question": "senior-pandas-udf"
+      },
+      {
+        "prompt": "Order of preference for custom logic",
+        "question": "senior-udf-order"
+      },
+      {
+        "prompt": "Where does Python memory come from?",
+        "question": "senior-memory-overhead"
+      }
+    ]
+  }
+]

@@ -262,3 +262,20 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - axe-core 4.10.2 on `storage-formats.html`: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/storage-formats-*.png`, `storage-parquet-diagram.png`).
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+# Senior DE interview bank — 2026-09-14
+
+## Content
+
+- Added 34 reviewed practice questions covering the supplied senior-bank sections: architecture and execution (job/stage/task, deploy modes, driver state, narrow versus wide, laziness, RDD/DataFrame/Dataset), partitioning and shuffle (repartition/coalesce, partition counts, shuffle partitions, shuffle writes, fetch throttling, bucketing), joins (strategies, selection, broadcast limits, sort-merge versus shuffled hash, outer joins, a 10 TB join), memory and OOM (layout, driver versus executor OOM, memoryOverhead), skew and tuning (skew fixes, salting, few-task stages, spill, speculation), Catalyst and AQE (planning phases, whole-stage codegen, AQE scope and limits, pushdown blockers), and PySpark specifics (UDF cost, pandas UDFs, order of preference).
+- `content/senior-interview-guide.json` indexes 40 prompts in 7 groups. Six prompts link to existing reviewed cards rather than duplicating answers (the reported flow question, the cache and checkpoint questions, skew detection), and the Python-memory prompt links to the memoryOverhead card, so one card serves two bank prompts. The guide renders as native disclosures above the question bank with its prompt count.
+- Answers correct the supplied draft where it oversimplified: one action can trigger several jobs; the driver holds the DAG and task schedulers, map-output tracker, and block-manager master state; null outer-join keys never match rather than concentrating work (rewriting them to a sentinel creates the hot key); broadcast eligibility depends on join type and keys, and a hint is not a size promise; salting's duplication and final-shuffle costs are stated; speculation's duplicate-attempt risk is stated.
+- Claims checked against versioned Spark 3.5.7 documentation (configuration, tuning, Web UI, RDD, SQL performance tuning, data source and Arrow guides) and the `DAGScheduler`, `QueryExecution`, and `WholeStageCodegenExec` sources; the codegen summary is quoted from the source file. The questions were not executed in a Spark runtime; the cards state the documentation-review limitation.
+
+## Checks
+
+- `npm run build` and `npm run check`: 17 pages, 793 local links/assets, 13 lesson schemas and example syntax, 76 questions, three prediction exercises; JavaScript syntax pass; `git diff --check` clean. The checker now validates the senior guide: group structure, prompt and link targets, full coverage of `senior-de` questions, and the rendered prompt count.
+- `python3 scripts/browser_test.py`: 78 checks pass, including guide rendering, group expansion, prompt-link navigation, and the updated text-filter expectations.
+- axe-core 4.10.2 on `questions.html` with the guide expanded: zero violations at 1280 and 390 CSS pixels. The expanded guide screenshot was inspected (`output/playwright/senior-guide.png`).
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

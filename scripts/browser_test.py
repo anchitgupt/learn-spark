@@ -251,9 +251,12 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
           and page.locator('[data-filter="Scenario"]').get_attribute('aria-pressed') == 'true')
     page.click('[data-filter="All"]')
     check('All filter restores every question', visible() == len(questions))
-    page.fill('#question-search', 'coalesce')
-    check('text filter finds the coalesce question',
+    page.fill('#question-search', 'coalesce(1)')
+    check('text filter finds the coalesce(1) question',
           page.locator('#practice-partitions-shuffles').is_visible() and visible() == 1)
+    page.fill('#question-search', 'salting')
+    check('text filter finds the new salting question',
+          page.locator('#senior-salting').is_visible())
     page.fill('#question-search', 'zzzz')
     check('no-match state appears when filtering', page.locator('#no-questions').is_visible())
     page.fill('#question-search', '')
@@ -294,6 +297,22 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     page.locator('#explain-back details.answer > summary').click()
     check('the storage explain-back disclosure opens',
           page.locator('#explain-back details.answer').evaluate('d => d.open'))
+
+    # ---------- senior DE guide ----------
+    report.section('Senior DE guide')
+    guide_data = json.loads((ROOT / 'content/senior-interview-guide.json').read_text())
+    guide_items = sum(len(group['items']) for group in guide_data)
+    page.goto(url('questions.html'))
+    senior = page.locator('#senior-de')
+    check('the senior bank guide renders with its prompt count',
+          senior.count() == 1 and f'{guide_items} prompts in {len(guide_data)} groups' in senior.locator('summary').first.text_content())
+    senior.locator('summary').first.click()
+    check('the guide lists every group', senior.locator(':scope > details').count() == len(guide_data))
+    check(f'the guide lists all {guide_items} prompt links', senior.locator('ol a').count() == guide_items)
+    senior.locator(':scope > details').first.locator('summary').click()
+    senior.locator('ol a').first.click()
+    check('a guide prompt link reaches its question card',
+          page.url.endswith('#flow-reported') and page.locator('#flow-reported').count() == 1)
 
     # ---------- notebook ----------
     report.section('Notebook')

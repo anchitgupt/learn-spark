@@ -756,5 +756,771 @@
     ],
     "reviewed": "2026-09-14",
     "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-deploy-mode",
+    "topic": "execution-flow",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What actually changes between client and cluster deploy mode?",
+    "answer": "Where the driver JVM runs. In client mode the driver lives on the machine that submitted the application — handy for interactive work, and fatal to the job if that machine goes away. In cluster mode the cluster manager launches the driver inside the cluster, so the submission client can exit and the application keeps running. The driver's location also decides where driver-side memory pressure and logs land.",
+    "followup": "Why do interactive notebooks usually assume client mode?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Submitting applications: client and cluster deploy modes",
+        "url": "https://spark.apache.org/docs/3.5.7/submitting-applications.html"
+      },
+      {
+        "title": "Cluster overview: driver, executors, deploy modes",
+        "url": "https://spark.apache.org/docs/3.5.7/cluster-overview.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-driver-state",
+    "topic": "architecture",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What does the driver actually hold while an application runs?",
+    "answer": "The scheduling and coordination state: the DAG scheduler that builds stages for each job, the task scheduler that places tasks, the block-manager master's view of cached blocks, the map-output tracker that locates shuffle outputs, plus broadcast and accumulator state and the Spark SQL planning machinery. That is why pulling results back with collect() or toPandas(), or materializing an oversized broadcast, can kill the driver while executors look healthy.",
+    "followup": "Which guard exists to stop collect() results from silently exhausting the driver?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "DAGScheduler source (v3.5.7): stage boundaries and failure handling",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      },
+      {
+        "title": "Cluster overview: driver, executors, deploy modes",
+        "url": "https://spark.apache.org/docs/3.5.7/cluster-overview.html"
+      },
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-narrow-wide",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Narrow versus wide transformation — why does the distinction matter?",
+    "answer": "A narrow transformation computes each output partition from a single input partition, so it pipelines inside the current stage. A wide transformation needs data from many input partitions, which requires a shuffle, and a shuffle boundary breaks the DAG into separate stages — one writes map output files, the next reads them. The DAGScheduler source states it plainly: stages are created by breaking the RDD graph at shuffle boundaries.",
+    "followup": "Which side of a shuffle ends on local disk, and which side pulls over the network?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "DAGScheduler source (v3.5.7): stage boundaries and failure handling",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      },
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-why-lazy",
+    "topic": "lazy-evaluation",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Why is Spark lazy rather than executing each transformation immediately?",
+    "answer": "Lazy planning lets the optimizer see the whole pipeline before anything runs: column pruning, filter pushdown, expression folding, join reordering, and codegen fusion are all rewrites of a plan you have not executed yet. Execute eagerly and each step would materialize data the next step can no longer optimize away. Actions are what trigger the work, and a plan inspection such as explain() shows the result of planning without running it.",
+    "followup": "Why can one action trigger more jobs than the single query you wrote?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "QueryExecution source (v3.5.7): analyzed, optimized, spark and executed plans",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/QueryExecution.scala"
+      },
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-rdd-df-dataset",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "RDD versus DataFrame versus Dataset — what does each give you?",
+    "answer": "An RDD is a distributed collection of objects with no schema: maximum control, but Catalyst and whole-stage codegen do not help you. A DataFrame adds a schema and expressions, which is what lets Spark SQL optimize the computation and execute it through generated code. A Dataset adds compile-time typing in Scala and Java only — typed lambdas can cost more than equivalent DataFrame expressions, so typing is a developer-experience trade-off, not a performance upgrade. PySpark has DataFrames only.",
+    "followup": "When is an RDD still the right answer in 2025-era Spark?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      },
+      {
+        "title": "QueryExecution source (v3.5.7): analyzed, optimized, spark and executed plans",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/QueryExecution.scala"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-job-stage-task",
+    "topic": "jobs-stages-tasks",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Define a job, a stage, and a task, and explain how many of each appear.",
+    "answer": "A job is a top-level unit of work submitted to the scheduler, typically triggered by an action — though one action can spawn several jobs, because preparation work such as broadcast materialization is itself a job. A stage is a set of tasks separated at shuffle boundaries, per the DAGScheduler source. A task is one partition's worth of work in one stage attempt, and it is retried individually before the stage fails. Jobs and stages appear in the Spark UI; tasks are the rows inside a stage.",
+    "followup": "In the UI, what do stage attempts versus task attempts tell you after a failure?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "DAGScheduler source (v3.5.7): stage boundaries and failure handling",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-repartition-coalesce",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "repartition versus coalesce — pick the right one for what you need.",
+    "answer": "repartition runs a full shuffle: it can increase or decrease the partition count, and it redistributes rows evenly unless you partition by columns. coalesce merges existing partitions without a shuffle, so it can only reduce the count, and it can leave the remaining partitions uneven. Use repartition when you need balance or a target count for downstream parallelism; use coalesce when you are trimming file count and can accept inherited skew.",
+    "followup": "Why can coalesce(1) make a write slower than repartition(1) ever was?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      },
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-partition-count",
+    "topic": "partitions-shuffles",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How do you choose a partition count for a stage?",
+    "answer": "Work backwards from sizes and cores. Spark's file source packs scans up to spark.sql.files.maxPartitionBytes (128 MiB by default), and AQE sizes post-shuffle partitions from an advisory target (64 MiB by default). A practical range is tens to a couple hundred MB per task, enough partitions to keep a wave of tasks busy — commonly 2-3 per core is the documented heuristic — and a count that is a sensible multiple of available cores so the final wave is not mostly idle.",
+    "followup": "What symptom tells you the count was too low even before you look at the numbers?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Spark 3.5.7 tuning guide: parallelism, memory, locality",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-shuffle-partitions",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What is spark.sql.shuffle.partitions, and why is the default 200 a problem?",
+    "answer": "It is the number of partitions used for post-shuffle stages of joins and aggregations, defaulting to a fixed 200 regardless of data size: too many tiny tasks for a small shuffle, too few oversized tasks for a large one. Modern Spark lets AQE coalesce post-shuffle partitions from a deliberately larger initial count using real output sizes, so the setting becomes an upper bound rather than a tuning guess. Check the executed plan to see how many partitions actually ran.",
+    "followup": "When would a very large initial count still hurt, even with AQE coalescing?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-shuffle-write",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What physically happens when a stage shuffles?",
+    "answer": "Each map task sorts or hashes its output by the target partitioner and writes it to local disk, keeping an index that lets readers find each block; the default sort-based manager produces one data file and one index file per map task. Reduce tasks then fetch their blocks from every map task's executor over the network, with fetch retries and a fallback after failures. Because map output lives on local disks, losing an executor can lose shuffle files and force upstream stages to rerun.",
+    "followup": "What does the external shuffle service change about executor loss?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: transformations, shuffle, persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html"
+      },
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-fetch-throttle",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What limits how aggressively a reducer pulls shuffle data, and why does it matter?",
+    "answer": "Throttles around the shuffle fetch client: spark.reducer.maxSizeInFlight caps in-flight fetch memory (48 MiB default), with related limits on concurrent fetch requests and blocks per address. They stop many reducers from simultaneously dragging the cluster's output into memory, which would cause OOMs and fetch failures. On large clusters where fetch wait dominates, these are the knobs to examine — with the understanding that raising them trades network pressure for memory pressure.",
+    "followup": "Which stage metric reveals reducers blocked waiting on remote shuffle blocks?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-bucket-partition",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Bucketing versus partitioning — what problem does each solve?",
+    "answer": "Partitioning writes directories keyed by low-cardinality columns, so filters on those columns skip entire directories during listing. Bucketing writes a fixed number of hash-bucketed files inside each partition, which Spark can use to avoid the exchange for joins and aggregations on compatibly bucketed tables — repeated large joins pay the shuffle once at write time instead of every run. Bucketing requires matching bucket counts and stable write behavior; a poor choice of bucket key leaves all its cost and no benefit.",
+    "followup": "Why does bucketing only pay off when the same key is joined repeatedly?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Data sources: bucketing, sorting and partitioning",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-load-save-functions.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-join-strategies",
+    "topic": "joins-skew",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Name the join strategies Spark can choose, and the situation each is built for.",
+    "answer": "Broadcast hash join: replicate a small side to every executor. Broadcast nested loop join: replicate a side when no equality keys exist. Shuffle hash join: build a per-partition hash map from one shuffled side. Sort-merge join: shuffle and sort both sides, spilling safely — the workhorse for large equi-joins. Cartesian joins cover everything else and are usually a mistake to allow quietly. The strategy appears in the physical plan and in the SQL tab.",
+    "followup": "Which strategy do you expect for two multi-terabyte tables joined on equality keys?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "SQL reference: join types and syntax",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-join.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-join-selection",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How does Spark decide which join strategy to use?",
+    "answer": "Static planning looks at estimated sizes against spark.sql.autoBroadcastJoinThreshold (10 MB default), whether the keys support sorting or hashing, the join type, and any strategy hints. Runtime takes over when adaptive query execution is enabled (it is, since 3.2): after the shuffle map stage completes, AQE can convert a sort-merge join to a broadcast or shuffled hash join based on actual sizes. Always read the chosen operator from the executed plan rather than assuming the threshold decided it.",
+    "followup": "Why can the same query get a different strategy on two consecutive runs?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-broadcast-limits",
+    "topic": "joins-skew",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "When does broadcasting a join side become the wrong choice?",
+    "answer": "When the broadcast side is only nominally small. The driver materializes the relation to broadcast it and every executor must hold a copy, so an oversized choice surfaces as driver memory pressure, broadcast timeouts, or executor OOMs rather than as a fast join. Eligibility also depends on the join type and keys — check which operator was actually selected. A hint prioritizes broadcasting; it is not a promise that the data fits.",
+    "followup": "Which config timeout fires when a broadcast waits too long to materialize?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-smj-shj",
+    "topic": "joins-skew",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Sort-merge join or shuffled hash join — trade-offs?",
+    "answer": "Sort-merge join sorts both shuffled sides and merges them: it spills to disk and stays safe at scale, which is why it is the default for large equi-joins. Shuffled hash join builds a hash table from one side per partition: less sorting work and often faster, but the build side must fit in execution memory or the task OOMs. AQE converts sort-merge to shuffled hash when every post-shuffle partition is below the local-map threshold — evidence the build side is genuinely small.",
+    "followup": "Why does the conversion happen only after the shuffle completes?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-outer-join",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Why can an outer join behave worse than the equivalent inner join?",
+    "answer": "Two mechanics. First, unmatched rows from the preserved side must survive into the result, so there is less the optimizer can drop or push down through the plan. Second, null join keys never match under equality — the SQL null semantics apply — so null rows pass through unjoined rather than joining; problems start when you rewrite nulls into a shared sentinel value or use null-safe equality, which can send every such row to one partition (and multiply matches).",
+    "followup": "How does the multi-match risk appear in a null-safe join?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "SQL null semantics: join and comparison behavior",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-null-semantics.html"
+      },
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-large-join",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How do you join a 10 TB fact table to a 50 GB dimension?",
+    "answer": "Assume a shuffle join, then try to avoid paying for it repeatedly. If the filterable part of the dimension is small enough, filter and aggregate it first, then broadcast. If this join runs every night, bucket both tables on the join key so Spark can skip the exchange. If one key dominates the fact table, handle skew explicitly — AQE skew handling on sort-merge joins, or salting — rather than hoping a bigger cluster fixes one hot partition.",
+    "followup": "What has to be true of both tables for bucketing to remove the shuffle?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Data sources: bucketing, sorting and partitioning",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-load-save-functions.html"
+      },
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-memory-layout",
+    "topic": "executor-memory",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Walk through an executor's memory layout.",
+    "answer": "The JVM heap is sized by spark.executor.memory; inside it Spark reserves 300 MiB for system use and splits the rest. spark.memory.fraction (0.6 default) is the unified region where execution memory — shuffles, joins, sorts, aggregations — and storage memory for cached blocks compete; spark.memory.storageFraction (0.5 default) is the share of that region cached blocks can hold without being evicted. Execution can evict storage, never the reverse, which is why caches appear to shrink under heavy compute.",
+    "followup": "Where does an off-heap Python worker's memory count if you enable it?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 tuning guide: memory management and eviction",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      },
+      {
+        "title": "Spark 3.5.7 tuning guide: parallelism, memory, locality",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-driver-executor-oom",
+    "topic": "executor-memory",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Driver OOM or executor OOM — how do you tell them apart, and what does each point to?",
+    "answer": "Read where the error was raised. Driver-side OOMs usually trace to collect(), toPandas(), a large broadcast build, or oversized driver-side structures — the failing process is the driver. Executor task OOMs trace to one oversized unit of work: a hot key, an oversized partition, too few partitions, or non-spillable state inside a UDF. Container kills with a healthy-looking heap point at memoryOverhead or the Python worker, not the JVM heap at all.",
+    "followup": "Which fix changes nothing when a single hot partition will not fit?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "title": "Spark 3.5.7 tuning guide: memory management and eviction",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-memory-overhead",
+    "topic": "executor-memory",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What is spark.executor.memoryOverhead actually for?",
+    "answer": "Non-heap memory charged to the executor container beyond the JVM heap: JVM overheads, native allocations, and, for PySpark, Python worker processes when no separate allocation is configured. Under the default factor (0.10, with a 384 MiB floor — 0.40 for Kubernetes non-JVM workloads) Spark computes it from executor memory; setting it explicitly overrides that. The classic 'container killed by YARN for exceeding memory limits' with a healthy heap is this budget, which is why raising memoryOverhead — not only heap — is the fix.",
+    "followup": "Why do PySpark UDFs make overhead sizing more important than in Scala jobs?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "title": "Spark 3.5.7 tuning guide: memory management and eviction",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-skew-fix",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "A sort-merge join has one task far slower than the rest. What are your options to fix it?",
+    "answer": "Prefer the cheapest structural fix that addresses the cause: enable or trust AQE skew handling, which splits and replicates skewed sort-merge join partitions from real post-shuffle sizes; salt the hot key when AQE cannot help (for example in a groupBy shuffle); isolate the hot keys into a separate broadcast join or pre-aggregate them; or reduce the incoming data with a filter. Runbook order matters: identify the key distribution first, since each fix assumes something about it.",
+    "followup": "What number do you compare against what to confirm skew rather than plain slowness?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-salting",
+    "topic": "joins-skew",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Explain salting concretely enough to implement it.",
+    "answer": "For the skew-prone key K: on the large side, append a random bucket label to K (roughly N values), producing K#0..K#N-1. On the small side, duplicate each row for K into N copies sharing those labels — typically by exploding an array of range(N). Join on the composite key so each bucket is a normal-sized partition, then aggregate the partial results, dropping the salt. Salting multiplies the small side and adds a final shuffle, so use it when a hot key genuinely dominates and AQE skew handling is not applicable.",
+    "followup": "Why does salting not help a groupBy without a join?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-few-tasks",
+    "topic": "spark-ui",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "A stage has only five tasks and takes hours. What do you check?",
+    "answer": "Why so little parallelism: partition count relative to cores, whether the input is one huge splittable file that was not split, thousands of small files collapsing into few tasks or the opposite, and whether an earlier filter or join reduced the data without reducing the partition count. Five tasks means five units of work no matter how big the cluster is — the fix is repartitioning or fixing the input layout, not adding executors.",
+    "followup": "What does Spark UI's task table show for each of the five tasks that tells you if one dominates?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-spill",
+    "topic": "executor-memory",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What is spill, why does it happen, and how do you see it?",
+    "answer": "Spill is Spark trading memory for disk: when the execution memory manager cannot grant more space to a sort or aggregation, the operator writes sorted runs to local disk instead of failing. The stage completes more slowly. The UI reports it directly — shuffle spill (memory) and (disk) on stage pages, spill size and peak memory per operator in the SQL tab. Treat it as a signal when it is large relative to the stage input or concentrated in a few tasks; compare tasks rather than expecting a fixed volume.",
+    "followup": "When is spill acceptable rather than a problem?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Spark 3.5.7 tuning guide: parallelism, memory, locality",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-speculation",
+    "topic": "jobs-stages-tasks",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "When should you enable spark.speculation, and what makes it risky?",
+    "answer": "Speculation launches a duplicate attempt of a task that is running unusually slowly and keeps whichever finishes first — useful on heterogeneous or flaky clusters where stragglers are caused by the environment, not the data. It is risky when tasks have side effects: both attempts can run, so non-idempotent writes or external counters can double-apply. It also consumes cluster capacity, so on a saturated cluster it mostly duplicates load.",
+    "followup": "What must your sink guarantee for speculative writes to be safe?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 configuration reference: shuffle, speculation, memory",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "title": "DAGScheduler source (v3.5.7): stage boundaries and failure handling",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/scheduler/DAGScheduler.scala"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-catalyst-phases",
+    "topic": "execution-flow",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Walk through what happens between writing a DataFrame and executing it.",
+    "answer": "The QueryExecution object exposes the phases: analyze the logical plan (resolve columns, tables, types), optimize it (rule-based rewrites, plus cost-based choices when statistics exist), create a physical plan (concrete strategies, planner picks one), then prepare the executed plan — inserting exchanges, satisfying partitioning and ordering, and collapsing eligible operators into whole-stage codegen. explain('extended') prints exactly these stages; the SQL tab shows the same artifacts with runtime metrics.",
+    "followup": "Where do table statistics enter, and what happens when they are missing?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "QueryExecution source (v3.5.7): analyzed, optimized, spark and executed plans",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/QueryExecution.scala"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-whole-stage-codegen",
+    "topic": "execution-flow",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What is whole-stage code generation and why does it exist?",
+    "answer": "It fuses a chain of operators that support codegen into a single generated Java function — the source file's own summary: 'compiles a subtree of plans that support codegen together into single Java function'. One loop processes each row through filter, projection, aggregate without per-row virtual dispatch or intermediate materialization. The SQL and stage DAGs show WholeStageCodegen blocks with codegen IDs; operators that cannot be fused, like an exchange, break the chain. Codegen can also disable itself and fall back on very large generated methods.",
+    "followup": "What in the UI tells you an operator was left out of the generated pipeline?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "WholeStageCodegenExec source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala"
+      },
+      {
+        "title": "Spark 3.5.7 Web UI guide: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-aqe",
+    "topic": "spark-ui",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What does adaptive query execution actually do at runtime?",
+    "answer": "It applies planning decisions after a shuffle map stage has produced real statistics: coalescing many small post-shuffle partitions into fewer, converting sort-merge joins to broadcast or shuffled hash joins when a side proves small, and splitting skewed sort-merge join partitions. It has been enabled by default since Spark 3.2 under spark.sql.adaptive.enabled. Because it reacts to completed stages, its effects appear between stages in the executed plan and in the SQL tab's updated plan.",
+    "followup": "Why can a physically planned broadcast not appear in the pre-execution explain?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-aqe-limits",
+    "topic": "spark-ui",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What problems does AQE not solve?",
+    "answer": "Anything not expressed as a post-shuffle planning decision: a slow scan on badly laid out files, a source-side hot partition before any exchange, an unpushable predicate or a Python UDF blocking optimization, an executor that cannot fit one task even after partition coalescing, and any problem whose evidence arrives after the stage it affects. AQE is a runtime planner, not a general fix — when the SQL tab shows the plan it chose, that plan is your new baseline to argue with.",
+    "followup": "Which single metric on the SQL tab would you read first for a slow scan?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark SQL performance tuning: shuffle partitions, hints, AQE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Parquet data source: pushdown and reader options",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-pushdown-blocks",
+    "topic": "lazy-evaluation",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What blocks predicate pushdown?",
+    "answer": "Anything the file reader cannot translate: Python UDFs are opaque functions to the reader, non-deterministic expressions cannot be pushed, and expressions outside the source's supported filter set stay in Spark. Partition pruning fails separately when the predicate wraps the partition column in a cast or function. The evidence is in the plan — look for which filters appear as pushed or partition filters on the scan; a missing entry tells you the predicate stayed in Spark.",
+    "followup": "Why does a cast on the partition column stop directory pruning?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Parquet data source: pushdown and reader options",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      },
+      {
+        "title": "PySpark pandas and Arrow user guide",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-python-udf-slow",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Why are Python UDFs slow, precisely?",
+    "answer": "Two costs. Data crosses the JVM-to-Python boundary as serialized values, and an ordinary scalar UDF processes them record by record rather than as vectorized batches. And the function is a black box to Spark: Catalyst cannot look inside it, so it blocks predicate pushdown and whole-stage codegen for the surrounding pipeline. The performance fix is usually to express the logic as a built-in function, and only then consider the vectorized UDF interfaces.",
+    "followup": "Which two boundaries does an Arrow-based UDF still cross?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "PySpark pandas and Arrow user guide",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      },
+      {
+        "title": "SQL reference: built-in functions",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-functions.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-pandas-udf",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What do pandas UDFs change about that boundary?",
+    "answer": "They transfer data in Arrow batches rather than one record at a time, so the Python side works on vectorized pandas Series (or a whole group for grouped variants) and the per-row overhead largely disappears. Types must be declared, and the boundary still exists, so Spark cannot optimize through the function. For genuinely Python-only logic, a pandas UDF is the right tool; for logic that exists as SQL, the built-in function is better.",
+    "followup": "When is a grouped map pandas UDF the wrong shape of tool entirely?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "PySpark pandas and Arrow user guide",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-udf-order",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What is the right order of preference when you need custom logic?",
+    "answer": "First a built-in SQL function — it stays inside Catalyst and codegen. Then higher-order functions and the array/map/struct toolbox for collection logic. Then a pandas or Arrow UDF when the logic is genuinely Python. A plain row-at-a-time Python UDF is the last resort, chosen with the serialization and optimizer costs on the table. State the choice out loud in interviews; reaching for a UDF first is the tell.",
+    "followup": "Which built-in family would you reach for to transform elements inside an array column?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "SQL reference: built-in functions",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-functions.html"
+      },
+      {
+        "title": "PySpark pandas and Arrow user guide",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
   }
 ]
