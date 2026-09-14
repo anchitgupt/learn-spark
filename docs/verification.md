@@ -194,3 +194,10 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - axe-core 4.10.2 on the new lesson: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/executor-memory-*.png`).
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `7ae3713a030ce49641d2389d4a844b740a4ad05b` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34821294435](https://github.com/anchitgupt/learn-spark/actions/runs/34821294435) completed successfully.
+- All 28 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
+- Live lesson: https://anchitgupt.github.io/learn-spark/executor-memory.html
