@@ -11,6 +11,6 @@ The baseline is classic PySpark 3.5.7 with a separate SQL session, four Range pa
 - [x] Integrate lesson navigation, homepage/capstone/lab links, search anchors, notebook topic, and authored question provenance.
 - [x] Extend content validation to exercise references, IDs, sources, and all new Python snippets. Check small-input arithmetic independently.
 - [x] Check disclosures with mouse/keyboard and JavaScript disabled; search; old progress/notes; mobile navigation; all pages at phone and desktop widths. Inspect screenshots.
-- [ ] Record local verification, commit and push, then confirm GitHub Pages success and live asset equality.
+- [x] Record local verification, commit and push, then confirm GitHub Pages success and live asset equality.
 
 Validation commands: `npm run build`, `npm run check`, `git diff --check`. Browser checks run through Playwright CLI against a local HTTP preview; screenshots and one-off scripts stay in ignored `output/playwright/`. No successful Spark execution will be claimed without running the examples on Spark 3.5.7.

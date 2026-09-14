@@ -98,3 +98,10 @@ An earlier browser run timed out clicking the second exercise disclosure while s
 Visually inspected desktop and phone screenshots of the opened exercises. The skip link and sticky header that appear mid-image are element-screenshot artifacts; on the live page the skip link stays off-screen until focused. Screenshots remain in ignored `output/playwright/`.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `75a5d20ce9635402ba9ef7dbf085f93c94891699` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34805147063](https://github.com/anchitgupt/learn-spark/actions/runs/34805147063) completed successfully.
+- All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
+- Live lesson: https://anchitgupt.github.io/learn-spark/predict-execution.html
