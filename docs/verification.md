@@ -217,3 +217,10 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - axe-core 4.10.2 on the new lesson: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/spark-ui-*.png`).
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `7955261e4d331f4c9aa51943525c09a388b5abb8` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34823257502](https://github.com/anchitgupt/learn-spark/actions/runs/34823257502) completed successfully.
+- All 29 public build files returned HTTP 200 and matched the local build byte for byte after deployment (one CSS fetch lagged the CDN on the first sweep, then matched on recheck).
+- Live lesson: https://anchitgupt.github.io/learn-spark/spark-ui.html
