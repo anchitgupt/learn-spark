@@ -146,12 +146,13 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     page.goto(url('index.html'))
     page.evaluate("localStorage.removeItem('spark-fieldnotes-v1')")
     page.reload()
-    check('fresh visit shows 0 / 10', page.locator('#progress-count').text_content().strip() == '0 / 10')
+    check(f'fresh visit shows 0 / {len(slugs)}', page.locator('#progress-count').text_content().strip() == f'0 / {len(slugs)}')
 
     seed = json.dumps({'version': 1, 'completed': slugs[:-1], 'notes': []})
     page.evaluate("value => localStorage.setItem('spark-fieldnotes-v1', value)", seed)
     page.reload()
-    check('nine saved lessons show 9 / 10', page.locator('#progress-count').text_content().strip() == '9 / 10')
+    expected = f'{len(slugs) - 1} / {len(slugs)}'
+    check(f'{len(slugs) - 1} saved lessons show {expected}', page.locator('#progress-count').text_content().strip() == expected)
 
     resume = page.locator('#resume-learning')
     check('resume link targets the next lesson',
@@ -171,7 +172,7 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     page.locator('.complete-button').click()
     check('unmarking a lesson restores the count',
           page.locator('.complete-button').get_attribute('aria-pressed') == 'false'
-          and len((storage(page) or {}).get('completed', [])) == 9)
+          and len((storage(page) or {}).get('completed', [])) == len(slugs) - 1)
 
     # ---------- answer disclosures ----------
     report.section('Prediction disclosures')

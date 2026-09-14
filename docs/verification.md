@@ -178,3 +178,19 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - Implementation commit `fb32a203f32ffa5bf333cec6ee6ab3721671855b` pushed to `origin/main`; local and remote commit IDs matched.
 - [GitHub Pages deployment 34819485811](https://github.com/anchitgupt/learn-spark/actions/runs/34819485811) completed successfully.
 - All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment; this change adds repository tooling and documentation only, so the published site is unchanged.
+
+# Executor memory lesson — 2026-09-14
+
+## Content
+
+- Added "Executor memory, spill & out-of-memory errors" as the ninth fundamentals lesson (slug `executor-memory`, lesson 09 of 11), placed between "Caching & fault tolerance" and the execution-flow capstone. Existing slugs and saved progress remain valid; the capstone and prediction lesson renumber to 10 and 11 automatically.
+- The lesson covers the executor memory model (heap plus overhead, the 300 MiB reserve, `spark.memory.fraction` and `spark.memory.storageFraction`, execution-versus-storage eviction), what spills and how the Spark UI reports it (Shuffle spill memory/disk, peak execution memory, SQL operator spill size), the three out-of-memory failure locations (driver, executor task, container/overhead, plus PySpark workers), and a debugging order that shrinks the unit of work before changing memory sizes.
+- Claims are tied to the versioned sources: the tuning and configuration guides (3.5.7), the Web UI guide for metric meanings, and the `UnifiedMemoryManager` and `UnsafeExternalSorter` sources. The lesson deliberately avoids exact counts: it tells the reader to read spill relative to the stage and compare tasks rather than expect fixed numbers. The example was not executed in Spark on this machine, and the page says so.
+
+## Checks
+
+- `npm run build` and `npm run check`: 15 pages, 572 local links/assets, 11 lesson schemas and example syntax, 15 questions, three prediction exercises, JavaScript syntax pass; `git diff --check` clean.
+- `python3 scripts/browser_test.py`: 66 checks pass with the 15-page site; the suite's progress checks now derive lesson counts from content instead of hardcoding them.
+- axe-core 4.10.2 on the new lesson: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/executor-memory-*.png`).
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

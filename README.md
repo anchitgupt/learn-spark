@@ -25,7 +25,7 @@ python3 scripts/browser_test.py          # or: npm run test:browser
 
 ## What's included
 
-- Ten linked lessons: eight fundamentals, the complete execution-flow capstone, and a prediction practice lesson.
+- Eleven linked lessons: nine fundamentals, the complete execution-flow capstone, and a prediction practice lesson.
 - Original small PySpark examples, expected results, pitfalls, and interview explanations.
 - Fifteen interview prompts: one question reported by Anchit and fourteen authored practice prompts, clearly labeled with their provenance.
 - Three prediction exercises: filter/count, groupBy/write, and broadcast join/aggregate. Each has native answer reveals, a task-flow diagram, plan/UI checks, a spoken answer, and a follow-up. A separate AQE comparison explores how the baseline can change.

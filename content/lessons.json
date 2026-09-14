@@ -332,6 +332,70 @@
     "version": "Apache Spark 3.5.7"
   },
   {
+    "slug": "executor-memory",
+    "chapter": "FUNDAMENTALS",
+    "title": "Executor memory, spill & out-of-memory errors",
+    "dek": "Understand where an executor's memory goes, why Spark spills to disk, and how to read an out-of-memory failure.",
+    "minutes": 8,
+    "idea": "Execution and storage share one bounded memory region. Spill is the graceful fallback when execution outgrows it; an out-of-memory error is what happens when a single unit of work — a task's partition, a collect(), or one hot key — cannot fit even with spilling.",
+    "sections": [
+      {
+        "id": "where-memory-goes",
+        "title": "Where the memory goes",
+        "body": "<p>An executor is a JVM process plus whatever runs beside it. <code>spark.executor.memory</code> sizes the JVM heap. <code>spark.executor.memoryOverhead</code> adds non-heap memory — VM overheads, interned strings, native allocations, and, for PySpark, the Python worker itself — and defaults to roughly 10% of executor memory with a 384 MiB minimum. Containers are sized from their sum, so the two settings describe different failure modes.</p><p>Inside the heap, Spark reserves 300 MiB for system use, then splits what remains. <code>spark.memory.fraction</code> (default 0.6) is the region shared by execution and storage memory; <code>spark.memory.storageFraction</code> (default 0.5) marks how much of that region cached blocks can claim without being evicted.</p><ul><li><strong>Execution memory</strong> holds working state: shuffle buffers, sort runs, and hash tables for joins and aggregations.</li><li><strong>Storage memory</strong> holds cached blocks for reuse.</li><li>Execution may evict cached storage when it needs space. Storage may <em>never</em> evict execution — the source comments call this out as a deliberate simplification.</li></ul><p>Two consequences matter in interviews: a pandas conversion or a large broadcast lands somewhere specific — driver or executor — and a cache that seems to disappear under heavy compute is the eviction rule at work, not a bug.</p><p class=\"section-source\">Check the sources: <a href=\"#source-tuning-memory\">Memory tuning overview</a> · <a href=\"#source-unified-manager\">UnifiedMemoryManager</a></p>"
+      },
+      {
+        "id": "what-spills",
+        "title": "What spills, and what it costs",
+        "body": "<p>Operators that need to see many rows at once — sorts, hash aggregations, shuffle writers — accumulate state in execution memory. When the memory manager cannot grant more, spillable structures write sorted runs to local disk and merge them later. The sort path carries an explicit element threshold that forces a spill before the structure grows arbitrarily, and spilled files land in Spark's configured local scratch directories, not remote storage.</p><p>Spill is graceful, not fatal: the stage completes more slowly because it traded memory pressure for disk I/O. It deserves action when it is large relative to the stage's input, or when it concentrates in a few tasks — compare tasks with each other instead of expecting any fixed size.</p><p>The Spark UI reports it directly. The Stages tab lists <strong>Shuffle spill (memory)</strong> — the deserialized form of the shuffled data held in memory — and <strong>Shuffle spill (disk)</strong> — the serialized form written to disk — next to peak execution memory and GC time. The SQL tab attributes <strong>spill size</strong> and <strong>peak memory</strong> to specific operators such as Sort and HashAggregate.</p><p class=\"section-source\">Check the sources: <a href=\"#source-web-ui\">Web UI metrics</a> · <a href=\"#source-sorter\">UnsafeExternalSorter</a></p>"
+      },
+      {
+        "id": "reading-oom",
+        "title": "Three out-of-memory failures, three places to look",
+        "body": "<p><strong>Driver OOM.</strong> The driver collects or materializes too much: <code>collect()</code>, <code>toPandas()</code>, a huge returned result, or a giant broadcast. <code>spark.driver.maxResultSize</code> exists to abort a job before this happens; the limit lives in the driver's heap, not an executor's.</p><p><strong>Executor task OOM.</strong> The working set of one task is too large — one oversized partition, or one hot key carrying a disproportionate share of rows. This is the failure the tuning guide describes for reduce-side operations, and its first suggested fix is more parallelism, so each task's input set is smaller. Adding executors does not split the offending partition.</p><p><strong>Container or overhead kill.</strong> The process is killed by YARN or Kubernetes for exceeding the container's memory limit while the JVM heap looks healthy. What ran out is non-heap memory: overhead, off-heap allocations, or a PySpark worker — Python memory lives outside the JVM heap and counts against overhead unless <code>spark.executor.pyspark.memory</code> sets its own limit.</p><p>Read the failure location, not just the exception text: driver logs, executor stderr, exit codes, and the Spark UI's per-task view each point at a different one of these.</p><p class=\"section-source\">Check the sources: <a href=\"#source-memory-config\">Configuration reference</a> · <a href=\"#source-tuning-memory\">Memory tuning overview</a></p>"
+      },
+      {
+        "id": "debugging-order",
+        "title": "How to debug it, in order",
+        "body": "<p>Work from observation to action, and keep the unit of work in mind at every step:</p><ol><li><strong>Locate the failure.</strong> Driver log, executor stderr, or a killed container. Find the stage and the tasks that failed or slowed first.</li><li><strong>Classify the pressure.</strong> Spill and GC high across every task suggests general memory pressure; one task far above the median suggests skew or an oversized partition.</li><li><strong>Shrink the unit of work.</strong> More or smaller partitions make each task's working set smaller; avoid collecting results to the driver, and fix skew where the data shape allows it.</li><li><strong>Check memory hygiene.</strong> Unpersist what is no longer reused — caching everything competes with execution memory.</li><li><strong>Only then change memory sizes.</strong> Raise executor memory when the single unit genuinely needs it; raise overhead when containers were killed despite a healthy heap; treat Python worker memory separately for PySpark.</li></ol><p>Interviewers listen for exactly this structure: where the failure happened, which unit could not fit, and why the chosen fix changes that unit's size — instead of \"add more executors\" applied blindly.</p><p class=\"section-source\">Check the sources: <a href=\"#source-tuning-memory\">Memory tuning overview</a> · <a href=\"#source-memory-config\">Configuration reference</a></p>"
+      }
+    ],
+    "code": "from pyspark.sql import functions as F\n\norders = spark.read.parquet(\"orders\")  # customer_id, amount\n\ntotals = (\n    orders\n    .groupBy(\"customer_id\")\n    .agg(F.sum(\"amount\").alias(\"total\"))\n)\n\ntotals.write.mode(\"overwrite\").parquet(\"customer_totals\")",
+    "output": "One row per distinct customer_id. Whether this stage spills depends on data size, partitioning, and executor memory — read the stage's Shuffle Spill (memory) and (disk) columns in the Spark UI rather than expecting a fixed amount.",
+    "pitfall": "Reading \"OutOfMemoryError\" as \"add more executors\". Executor count cannot split a single oversized partition, one collect() result, or one hot key. Find which unit of work failed to fit first.",
+    "question": "A groupBy job fails with OutOfMemoryError. How do you decide whether to change the data layout, the code, or the executor configuration?",
+    "answer": "Locate the failure before changing anything: a driver OOM points at collect-style code or oversized driver structures; a task OOM in a few tasks points at skew or oversized partitions; a container kill with a healthy heap points at overhead or Python worker memory. From there: fix skew or partition size to shrink the largest unit of work, stop materializing results on the driver, and review caching so storage is not competing with execution. Change memory sizes last, and only for the component that actually died — adding executors rarely fixes a single unit that cannot fit, because one task still processes one partition.",
+    "sources": [
+      {
+        "id": "tuning-memory",
+        "title": "Tuning guide: memory management overview",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html"
+      },
+      {
+        "id": "memory-config",
+        "title": "Configuration: memory management and executor properties",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "id": "web-ui",
+        "title": "Web UI: stage and SQL spill metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "id": "unified-manager",
+        "title": "UnifiedMemoryManager source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/scala/org/apache/spark/memory/UnifiedMemoryManager.scala"
+      },
+      {
+        "id": "sorter",
+        "title": "UnsafeExternalSorter source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/core/src/main/java/org/apache/spark/util/collection/unsafe/sort/UnsafeExternalSorter.java"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
     "slug": "execution-flow",
     "chapter": "CAPSTONE",
     "title": "The complete Spark execution flow",
@@ -342,7 +406,7 @@
       {
         "id": "scope",
         "title": "Before you draw the flow",
-        "body": "<p>Open with a scope statement: <strong>“I’ll describe a classic PySpark batch application using DataFrames on Spark 3.5.7.”</strong> Then separate the application’s lifetime from the execution of an individual query. One application can run many queries and jobs.</p><p>This matters in interviews: a notebook may already have a session and compute attached. With Spark Connect, a client sends plans to a remote server; the Python client is not the classic driver described below. Structured Streaming adds a continuously running query and its own execution lifecycle.</p><p>Learn the eight fundamentals first if the terms are new. This is the capstone that connects them.</p><p class=\"section-source\">Check the source: <a href=\"#source-connect\">Spark Connect has a separate client/server architecture</a> · <a href=\"#source-cluster\">Application components and resource allocation</a></p>"
+        "body": "<p>Open with a scope statement: <strong>“I’ll describe a classic PySpark batch application using DataFrames on Spark 3.5.7.”</strong> Then separate the application’s lifetime from the execution of an individual query. One application can run many queries and jobs.</p><p>This matters in interviews: a notebook may already have a session and compute attached. With Spark Connect, a client sends plans to a remote server; the Python client is not the classic driver described below. Structured Streaming adds a continuously running query and its own execution lifecycle.</p><p>Learn the fundamentals first if the terms are new. This is the capstone that connects them.</p><p class=\"section-source\">Check the source: <a href=\"#source-connect\">Spark Connect has a separate client/server architecture</a> · <a href=\"#source-cluster\">Application components and resource allocation</a></p>"
       },
       {
         "id": "startup",
