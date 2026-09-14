@@ -60,3 +60,10 @@ At the time of the initial local validation, the directory had no git repository
 - Visually inspected desktop and phone walkthrough screenshots and the architecture diagram. Screenshots remain in ignored `output/playwright/`.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `365f9722bac227feceecaaa03df45c3eebed3c3e` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34803026339](https://github.com/anchitgupt/learn-spark/actions/runs/34803026339) completed successfully.
+- All 26 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
+- Live lesson: https://anchitgupt.github.io/learn-spark/execution-flow.html
