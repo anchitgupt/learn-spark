@@ -130,3 +130,24 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34816426019](https://github.com/anchitgupt/learn-spark/actions/runs/34816426019) completed successfully.
 - All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
 - Live question bank: https://anchitgupt.github.io/learn-spark/questions.html
+# Accessibility audit — 2026-09-14
+
+## Findings and fixes
+
+First audit of contrast, screen-reader structure, target size, and Lighthouse. Findings were reproduced against the local build with axe-core 4.10.2 on all 14 pages at 390 and 1280 CSS pixels, and with Lighthouse 12.
+
+- Contrast: eleven muted colors were below 4.5:1 (breadcrumb 3.72, sidebar lesson numbers 3.19–3.45, code labels and notes 4.18–4.44, pitfall text 4.44, and similar). All now clear 4.5:1 on every background they appear on (lowest 4.6:1). The pitfall needed a direct `.pitfall p` override because the global `p` rule sets its color directly.
+- Landmarks: the lesson pitfall callout was an `aside` nested inside the article; it is now a `div`. The table of contents and course sidebar now carry distinct labels ("On this page", "Course"), and the breadcrumb separator is `aria-hidden`.
+- Keyboard: every `<pre>` code block is focusable (`tabindex="0"`), so horizontally scrollable code is reachable without a pointer.
+- Target size: footer, back, hero, source-list, and question-meta links were under 24 px and now measure 24–30 px. The full-size diagram link now covers the whole image (671×425) instead of a 20 px inline strip. Links inside sentences stay as-is under the WCAG 2.5.8 inline exception.
+- Label in name: the search trigger's ⌘ K hint is now rendered from CSS and hidden from assistive technology so the accessible name matches the visible text.
+
+## Checks
+
+- axe-core 4.10.2: zero violations on all 14 pages at 390 px; zero on the audited pages at 1280 px where the sidebar and table of contents are visible.
+- Lighthouse 12 accessibility: 100 on the homepage and on the execution-flow lesson, with no failing or advisory items.
+- A tap-target sweep at 390 px leaves no sub-24 px target except prose links (WCAG inline exception). Screenshots and audit JSON remain in ignored `output/playwright/`.
+- `npm run build` and `npm run check` pass (14 pages, 517 local links/assets, ten lesson schemas, 15 questions, three prediction exercises, JavaScript syntax); `git diff --check` was clean. Screenshots were inspected at desktop and phone widths; no visual regressions from the color and padding changes.
+- Limits: hover/focus styling, forced-colors mode, and real screen-reader runs were not part of this pass. Lighthouse ran against the local build; live assets are checked against the generated build after deployment.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
