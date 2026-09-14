@@ -151,3 +151,10 @@ First audit of contrast, screen-reader structure, target size, and Lighthouse. F
 - Limits: hover/focus styling, forced-colors mode, and real screen-reader runs were not part of this pass. Lighthouse ran against the local build; live assets are checked against the generated build after deployment.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check
+
+- Implementation commit `acca9789a62f9ff1c3f8a3070dac24da00bd62cd` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34818961223](https://github.com/anchitgupt/learn-spark/actions/runs/34818961223) completed successfully.
+- All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
+- Live lesson: https://anchitgupt.github.io/learn-spark/execution-flow.html
