@@ -2,6 +2,7 @@
 import ast
 import json
 import re
+from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -70,16 +71,32 @@ slugs = [l['slug'] for l in lessons]
 assert len(set(slugs)) == len(slugs)
 for lesson in lessons:
     assert lesson['sources'] and lesson['reviewed'] and lesson['version']
+    assert lesson.get('chapter'), lesson['slug'] + ': needs a chapter label'
     assert all(s['url'].startswith((
         'https://spark.apache.org/docs/',
         'https://github.com/apache/spark/blob/v3.5.7/',
     )) for s in lesson['sources']), 'Use versioned official documentation or Spark source'
     ast.parse(lesson['code'])
+    assert escape(lesson['chapter']) + ' / LESSON' in (OUT / (lesson['slug'] + '.html')).read_text(), lesson['slug'] + ': eyebrow must name its chapter'
 questions = json.loads((ROOT / 'content/questions.json').read_text())
+predictions = json.loads((ROOT / 'content/predictions.json').read_text())
+exercises = {item['id']: item for item in predictions}
+questions_page = (OUT / 'questions.html').read_text()
 assert len(set(q['id'] for q in questions)) == len(questions)
 assert all(re.fullmatch(r'[a-z0-9-]+', q['id']) for q in questions)
-assert all(q['topic'] in slugs and q['answer'] and q['source'] for q in questions)
+for q in questions:
+    assert q['topic'] in slugs and q['source'], q['id'] + ': needs a known topic and a source'
+    assert q.get('origin') in ('reported', 'practice'), q['id'] + ': origin must be "reported" or "practice"'
+    if 'exercise' in q:
+        # Exercise-linked questions take the exercise's spoken answer and follow-up at build time.
+        assert q['exercise'] in exercises and 'answer' not in q and 'followup' not in q, q['id'] + ': reference one known exercise instead of copying its answer'
+        exercise = exercises[q['exercise']]
+        assert escape(exercise['spoken']) in questions_page and escape(exercise['followup']) in questions_page, q['id'] + ': card must show its exercise answer and follow-up'
+    else:
+        assert q.get('answer') and q.get('followup'), q['id'] + ': needs an answer and follow-up'
+        assert all(q['answer'] != item['spoken'] for item in predictions), q['id'] + ': copies an exercise answer; reference it with "exercise"'
 for item in json.loads((OUT / 'search.json').read_text()):
+    assert not re.search(r'<[a-zA-Z/][^>]*>|&(?:[a-zA-Z]+|#\d+);', item['title'] + ' ' + item['text']), item['url'] + ': search text contains HTML markup'
     target = urlsplit(item['url'])
     assert (OUT / target.path).is_file()
     if target.fragment:
@@ -89,7 +106,6 @@ assert phases
 for phase in phases:
     assert all(phase.get(k) for k in ['title', 'owner', 'state', 'detail', 'data', 'evidence', 'anchor'])
     assert phase['anchor'] in pages['execution-flow.html'].ids
-predictions = json.loads((ROOT / 'content/predictions.json').read_text())
 prediction_ids = [item['id'] for item in predictions]
 assert len(set(prediction_ids)) == len(prediction_ids)
 assert all(re.fullmatch(r'[a-z0-9-]+', item) for item in prediction_ids)

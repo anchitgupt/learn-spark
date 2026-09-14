@@ -1,6 +1,7 @@
 [
   {
     "slug": "what-is-spark",
+    "chapter": "FUNDAMENTALS",
     "title": "What is Apache Spark?",
     "dek": "Start with the problem Spark solves, before the API you write.",
     "minutes": 5,
@@ -39,6 +40,7 @@
   },
   {
     "slug": "architecture",
+    "chapter": "FUNDAMENTALS",
     "title": "Driver, executors & the cluster",
     "dek": "Know who plans the work and who actually runs it.",
     "minutes": 6,
@@ -81,6 +83,7 @@
   },
   {
     "slug": "dataframes",
+    "chapter": "FUNDAMENTALS",
     "title": "RDDs, DataFrames & Spark SQL",
     "dek": "Choose the right abstraction for a data engineering pipeline.",
     "minutes": 5,
@@ -119,6 +122,7 @@
   },
   {
     "slug": "lazy-evaluation",
+    "chapter": "FUNDAMENTALS",
     "title": "Lazy evaluation & actions",
     "dek": "Understand why a line of code is not a job.",
     "minutes": 6,
@@ -157,6 +161,7 @@
   },
   {
     "slug": "jobs-stages-tasks",
+    "chapter": "FUNDAMENTALS",
     "title": "Jobs, stages & tasks",
     "dek": "Read the execution hierarchy without memorizing misleading formulas.",
     "minutes": 6,
@@ -199,6 +204,7 @@
   },
   {
     "slug": "partitions-shuffles",
+    "chapter": "FUNDAMENTALS",
     "title": "Partitions & shuffles",
     "dek": "Follow the data when work needs to cross partition boundaries.",
     "minutes": 7,
@@ -241,6 +247,7 @@
   },
   {
     "slug": "joins-skew",
+    "chapter": "FUNDAMENTALS",
     "title": "Joins & data skew",
     "dek": "Reason about data shape before reaching for a join hint.",
     "minutes": 7,
@@ -283,6 +290,7 @@
   },
   {
     "slug": "cache-recovery",
+    "chapter": "FUNDAMENTALS",
     "title": "Caching & fault tolerance",
     "dek": "Reuse the right work, and know what Spark can recompute.",
     "minutes": 6,
@@ -325,6 +333,7 @@
   },
   {
     "slug": "execution-flow",
+    "chapter": "CAPSTONE",
     "title": "The complete Spark execution flow",
     "dek": "From spark-submit to the final result: explain who does what, when, and why.",
     "minutes": 18,
@@ -495,6 +504,7 @@
   },
   {
     "slug": "predict-execution",
+    "chapter": "PRACTICE",
     "title": "Predict what Spark will do",
     "minutes": 25,
     "dek": "Three interview exercises. Read the code, predict the work, then check your reasoning against the plan and Spark UI.",

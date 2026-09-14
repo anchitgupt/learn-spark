@@ -2,6 +2,7 @@
 import json
 import shutil
 from html import escape as e
+from html.parser import HTMLParser
 from pathlib import Path
 from flow import render_flow
 from predictions import render_exercise
@@ -48,12 +49,46 @@ def section_id(section, index):
     return section.get("id", f"section-{index}")
 
 
+def find(items, field, value, error):
+    match = next((item for item in items if item[field] == value), None)
+    if match is None:
+        raise SystemExit(error)
+    return match
+
+
+BLOCK_TAGS = {'p', 'div', 'li', 'ul', 'ol', 'section', 'figure', 'figcaption', 'h1', 'h2', 'h3', 'h4', 'table', 'tr', 'td', 'th', 'br'}
+
+
+class TextOnly(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in BLOCK_TAGS:
+            self.parts.append(' ')
+
+    def handle_endtag(self, tag):
+        if tag in BLOCK_TAGS:
+            self.parts.append(' ')
+
+    def handle_data(self, data):
+        self.parts.append(data)
+
+
+def plain(markup):
+    """Flatten trusted HTML into searchable text."""
+    parser = TextOnly()
+    parser.feed(markup)
+    return ' '.join(''.join(parser.parts).split())
+
+
 for i,l in enumerate(LESSONS):
     sections=''.join(f'<section id="{section_id(s, j)}"><h2>{e(s["title"])}</h2>{s["body"]}</section>' for j,s in enumerate(l['sections']))
     sources=''.join(f'<li id="source-{e(str(s.get("id", j)))}"><a href="{e(s["url"])}" target="_blank" rel="noreferrer">{e(s["title"])} ↗</a></li>' for j,s in enumerate(l['sources']))
     toc=''.join(f'<a href="#{section_id(s, j)}">{e(s["title"])}</a>' for j,s in enumerate(l['sections']))
     for j, exercise_id in enumerate(l.get('exercises', []), 1):
-        exercise = next(item for item in PREDICTIONS if item['id'] == exercise_id)
+        exercise = find(PREDICTIONS, 'id', exercise_id, f'content/lessons.json: lesson "{l["slug"]}" lists unknown exercise "{exercise_id}"')
         sections += render_exercise(exercise, j)
         toc += f'<a href="#{e(exercise_id)}">{j:02} {e(exercise["title"])}</a>'
     diagram='<figure class="architecture"><img src="assets/architecture.svg" alt="The driver schedules tasks on executor processes. The cluster manager allocates resources. Executors read and write external storage."><figcaption>Simplified classic Spark architecture. A worker machine may host executor processes.</figcaption></figure>' if l['slug']=='architecture' else ''
@@ -72,26 +107,34 @@ for i,l in enumerate(LESSONS):
     toc_practice = 'Compare with AQE' if l.get('exercises') else 'Try it yourself'
     prev=LESSONS[i-1] if i else None
     nxt=LESSONS[i+1] if i<len(LESSONS)-1 else None
-    page(l['slug'],l['title'],f'''<div class="lesson-layout"><article class="article"><a class="back-link" href="index.html">← The learning path</a><div class="eyebrow">FUNDAMENTALS / LESSON {i+1:02}</div><h1>{e(l['title'])}</h1><p class="article-dek">{e(l['dek'])}</p><div class="article-meta"><span>{l['minutes']} min read + practice</span><span>PySpark</span><span>3.5.7 reference</span></div><div class="core-idea"><span class="eyebrow">THE IDEA TO KEEP</span><p>{e(l['idea'])}</p></div>{entry}{walkthrough}{diagram}{sections}{lab}
+    page(l['slug'],l['title'],f'''<div class="lesson-layout"><article class="article"><a class="back-link" href="index.html">← The learning path</a><div class="eyebrow">{e(l['chapter'])} / LESSON {i+1:02}</div><h1>{e(l['title'])}</h1><p class="article-dek">{e(l['dek'])}</p><div class="article-meta"><span>{l['minutes']} min read + practice</span><span>PySpark</span><span>3.5.7 reference</span></div><div class="core-idea"><span class="eyebrow">THE IDEA TO KEEP</span><p>{e(l['idea'])}</p></div>{entry}{walkthrough}{diagram}{sections}{lab}
     <section id="try-it"><h2>{practice_title}</h2><p>Run this in a PySpark notebook with an existing <code>spark</code> session. <a href="architecture.html#try-it">Create a local session</a> if needed. Examples are illustrative; this website does not execute Spark.</p><div class="code-block"><div><span>PYTHON / PYSPARK</span><button class="copy-code js-only">Copy code</button></div><pre><code>{e(l['code'])}</code></pre></div><div class="expected"><strong>Expected result</strong><p>{e(l['output'])}</p></div><p class="code-note">Result reasoned through on the small input; not runtime-tested against a Spark cluster.</p></section>
     <aside class="pitfall"><strong>Watch the assumption</strong><p>{e(l['pitfall'])}</p></aside><section id="explain-back"><span class="eyebrow">EXPLAIN IT BACK</span><h2>{e(l['question'])}</h2><p>Say your answer out loud before opening the notes.</p><details class="answer"><summary>Reveal the reasoning</summary><p>{e(l['answer'])}</p></details></section>
     <section id="sources" class="sources"><h2>Sources & verification</h2><p>Core claims checked against <strong>{e(l['version'])}</strong> documentation and source references on {l['reviewed']}. Explanations, scenarios, and diagrams are original teaching material. Other releases and managed runtimes can differ.</p><ul>{sources}</ul></section>
     <button class="button primary js-only complete-button" data-lesson="{l['slug']}" aria-pressed="false">Mark as understood ✓</button><nav class="lesson-pagination" aria-label="Lesson navigation">{f'<a href="{prev["slug"]}.html"><small>← PREVIOUS</small>{e(prev["title"])}</a>' if prev else '<a href="index.html"><small>← BACK</small>Learning path</a>'}{f'<a href="{nxt["slug"]}.html"><small>NEXT →</small>{e(nxt["title"])}</a>' if nxt else '<a href="questions.html"><small>NEXT →</small>Interview practice</a>'}</nav></article><aside class="toc"><span class="eyebrow">ON THIS PAGE</span>{toc}<a href="#try-it">{toc_practice}</a><a href="#explain-back">Explain it back</a><a href="#sources">Sources & verification</a><div class="toc-note">Don’t just remember it.<br>Build a mental model.</div></aside></div>''')
 
+def resolve_question(q):
+    lesson=find(LESSONS, 'slug', q['topic'], f'content/questions.json: question "{q["id"]}" references unknown topic "{q["topic"]}"')
+    if 'exercise' in q:
+        exercise=find(PREDICTIONS, 'id', q['exercise'], f'content/questions.json: question "{q["id"]}" references unknown exercise "{q["exercise"]}"')
+        return lesson, exercise['spoken'], exercise['followup']
+    return lesson, q['answer'], q['followup']
+
+
 cards=''
 for q in QUESTIONS:
-    lesson=next(l for l in LESSONS if l['slug']==q['topic'])
+    lesson, answer, followup = resolve_question(q)
     origin = 'Interview-reported' if q.get('origin') == 'reported' else 'Authored practice'
-    cards+=f'''<article class="question-card" id="{q['id']}" data-type="{q['type']}" data-search="{e((q['question']+' '+q['answer']+' '+lesson['title']).lower(),quote=True)}"><div class="question-meta"><span>{q['type']}</span><span class="question-origin">{origin}</span><a href="{q['topic']}.html">{e(lesson['title'])} ↗</a></div><h2>{e(q['question'])}</h2><details class="answer"><summary>Reveal the reasoning</summary><p>{e(q['answer'])}</p><p><strong>Follow-up:</strong> {e(q['followup'])}</p><p class="code-note">{e(q['source'])} Technical sources are linked in the related lesson.</p></details></article>'''
+    cards+=f'''<article class="question-card" id="{q['id']}" data-type="{q['type']}" data-search="{e((q['question']+' '+answer+' '+lesson['title']).lower(),quote=True)}"><div class="question-meta"><span>{q['type']}</span><span class="question-origin">{origin}</span><a href="{q['topic']}.html">{e(lesson['title'])} ↗</a></div><h2>{e(q['question'])}</h2><details class="answer"><summary>Reveal the reasoning</summary><p>{e(answer)}</p><p><strong>Follow-up:</strong> {e(followup)}</p><p class="code-note">{e(q['source'])} Technical sources are linked in the related lesson.</p></details></article>'''
 page('questions','Interview questions',f'''<div class="collection"><div class="eyebrow">02 / PUT IT INTO PRACTICE</div><h1>Think it through.<br><em>Then say it out loud.</em></h1><p class="article-dek">A good answer explains the trade-off, not just the definition.</p><div class="collection-intro"><p>Interview-reported questions and authored practice are labeled separately. Keep your own drafts in <a href="notebook.html">your notebook ↗</a>.</p><a class="button" href="notebook.html#question-form">+ Add your own question</a></div><div class="filter-bar js-only"><label class="filter-search">Find a question<input type="search" id="question-search" placeholder="Search questions and answers…"></label><div class="filters" role="group" aria-label="Question type"><button class="active" aria-pressed="true" data-filter="All">All</button><button aria-pressed="false" data-filter="Scenario">Scenarios</button><button aria-pressed="false" data-filter="Concept">Concepts</button></div></div><p id="question-count" aria-live="polite">{len(QUESTIONS)} questions</p><div id="question-list">{cards}</div><p id="no-questions" hidden>No questions match. Try a different term or filter.</p></div>''')
 
 options=''.join(f'<option value="{l["slug"]}">{e(l["title"])}</option>' for l in LESSONS)
 page('notebook','My notebook',f'''<div class="collection notebook"><div class="eyebrow">YOUR PERSONAL FIELDNOTES</div><h1>The question you<br><em>don’t want to forget.</em></h1><p class="article-dek">Capture it after the interview. Come back with a better answer.</p><div class="storage-note"><strong>Saved in this browser only.</strong> Export a backup to keep your questions or move devices. Browser storage can be cleared; notes are not synced to GitHub.</div><noscript><p>The personal notebook needs JavaScript to save and edit notes. Lessons and practice questions remain available without it.</p></noscript><div class="js-only"><div class="notebook-actions"><button id="export-notes" class="button">Export notebook ↓</button><label class="button import-label">Import notebook ↑<input type="file" id="import-notes" accept="application/json,.json"></label></div><form id="question-form"><h2 id="form-title">Add an interview question</h2><input type="hidden" id="editing-id"><label for="note-question">What were you asked?</label><textarea id="note-question" required maxlength="2000" rows="3" placeholder="A Spark job is stuck on the last task. How would you investigate?"></textarea><div class="form-row"><div><label for="note-topic">Related topic</label><select id="note-topic">{options}</select></div><div><label for="note-date">Interview date (optional)</label><input id="note-date" type="date"></div></div><label for="note-answer">Your answer or reasoning (optional)</label><textarea id="note-answer" maxlength="10000" rows="4" placeholder="My first instinct was… What I still need to verify…"></textarea><label for="note-source">Reference URL (optional)</label><input id="note-source" type="url" maxlength="2000" placeholder="https://spark.apache.org/docs/…"><p class="code-note">New notes are marked “Needs verification.” A saved source link is a reference, not an automatic fact-check.</p><div class="form-actions"><button class="button primary" type="submit">Save question</button><button class="button" type="button" id="cancel-edit" hidden>Cancel edit</button></div></form><div class="section-heading"><h2>Your questions</h2><span id="notes-count">0 saved</span></div><div id="notes-list"></div></div><section id="review-process" class="sources"><h2>A notebook that earns your trust</h2><p>Built-in lessons cite the versioned Apache Spark documentation used for review. Examples have expected results but are explicitly marked as not runtime-tested. Personal notes stay unverified until someone checks the actual claim and runtime.</p><ol><li>Capture the question and your reasoning here.</li><li>Export your notebook and provide the relevant questions for review.</li><li>Check the Spark version, official documentation, and a minimal reproduction.</li><li>Add the corrected explanation and sources to the repository’s lesson or question files, then rebuild the site.</li></ol><p>This static site does not contain an AI verifier. Never paste private employer data or confidential interview material into public repository content.</p></section></div>''')
 
 page('lab','Visual lab','''<div class="collection lab-page"><a class="back-link" href="execution-flow.html#flow-map">Explore the complete application-to-result flow →</a><div class="eyebrow">THE VISUAL LAB / 01</div><h1>What actually moves<br><em>during a shuffle?</em></h1><p class="article-dek">Follow six rows from scattered input to groups that share a key.</p><div class="lab-topline"><span class="tiny-tag">INTERACTIVE MODEL</span><span>Filter → redistribute by city → count</span></div><div class="lab-box"><div class="lab-controls js-only"><label>Operation<select id="lab-mode"><option value="shuffle">Group by city (shuffle)</option><option value="filter">Filter to Pune (local)</option></select></label><button class="button" id="lab-play">Play walkthrough</button><button class="button" id="lab-step">Next step →</button><button class="button" id="lab-reset">Reset</button></div><div class="canvas-viewport" tabindex="0" role="region" aria-label="Scrollable shuffle diagram"><canvas id="shuffle-canvas" width="1000" height="440" role="img" aria-label="Conceptual row movement across three input and three output partitions. The step explanation below describes the current state.">Three input partitions each contain two city rows. Grouping brings rows for each city together; filtering removes non-Pune rows locally.</canvas></div><div class="lab-caption"><span id="lab-step-label">STEP 1 / 4</span><p id="lab-description" aria-live="polite">Input: each partition contains a mix of cities. Pune appears in all three partitions.</p></div></div><p class="code-note">A conceptual model, not a Spark execution or performance benchmark. Real aggregations may combine locally before a shuffle; hash partitions can contain multiple keys, and AQE can change partition counts.</p><div class="lab-explanation"><section><h2>Follow the key</h2><p>Grouping requires compatible distribution: all partial results for a city must reach the right downstream partition. Here, we illustrate a simplified assignment with one city per output partition.</p></section><section><h2>Compare with a filter</h2><p>A filter evaluates rows in their existing partitions. Select “Filter to Pune” to see rows disappear without crossing partition boundaries.</p></section></div><section class="video-section"><span class="eyebrow">THE 12-SECOND RECAP</span><h2>One shuffle, frame by frame.</h2><video controls preload="metadata" playsinline poster="assets/video-poster.png" aria-label="Silent animated explanation of a shuffle"><source src="assets/shuffle.mp4" type="video/mp4"><track default kind="captions" srclang="en" label="English" src="assets/shuffle.vtt">Your browser cannot play this video. Read the transcript below.</video><details class="answer"><summary>Read the full video transcript</summary><p>0–3 seconds: Six rows are split across three input partitions. Each row has a city key.</p><p>3–8 seconds: Rows move to the illustrated output partition for their city. Pune rows come together; Delhi rows come together.</p><p>8–12 seconds: The grouped result has Pune: 3, Delhi: 2, and Mumbai: 1. This illustrates redistribution; real Spark can partially aggregate before moving data.</p></details></section><a class="inline-lab" href="predict-execution.html">Put it into practice: predict three Spark queries →</a><a class="inline-lab" href="partitions-shuffles.html">Continue reading: partitions & shuffles →</a><p class="code-note">Technical reference: <a href="https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#shuffle-operations">Apache Spark shuffle operations ↗</a></p></div>''')
-search=[dict(title=l['title'],text=' '.join([l['dek'],l['idea'],l['question'],l['answer']]+[s['body'] for s in l['sections']]),url=l['slug']+'.html',kind='Lesson') for l in LESSONS]
-search += [dict(title=q['question'],text=q['answer'],url='questions.html#'+q['id'],kind='Reported question' if q.get('origin') == 'reported' else 'Practice question') for q in QUESTIONS]
-search += [dict(title=x['title'],text=' '.join([x['intro'], x['code'], *x['prompts'], *x['reasoning'], x['followup']]),url='predict-execution.html#'+x['id'],kind='Prediction exercise') for x in PREDICTIONS]
+search=[dict(title=plain(l['title']),text=plain(' '.join([l['dek'],l['idea'],l['question'],l['answer']]+[s['body'] for s in l['sections']])),url=l['slug']+'.html',kind='Lesson') for l in LESSONS]
+search += [dict(title=plain(q['question']),text=plain(resolve_question(q)[1]),url='questions.html#'+q['id'],kind='Reported question' if q.get('origin') == 'reported' else 'Practice question') for q in QUESTIONS]
+search += [dict(title=plain(x['title']),text=plain(' '.join([x['intro'], x['code'], *x['prompts'], *x['reasoning'], x['followup']])),url='predict-execution.html#'+x['id'],kind='Prediction exercise') for x in PREDICTIONS]
 (OUT/'search.json').write_text(json.dumps(search,ensure_ascii=False))
 (OUT/'topics.json').write_text(json.dumps({l['slug']:l['title'] for l in LESSONS}))
 print(f'Built {len(LESSONS)+4} pages in {OUT}')

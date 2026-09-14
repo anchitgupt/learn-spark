@@ -3,6 +3,7 @@
     "id": "practice-what-is-spark",
     "topic": "what-is-spark",
     "type": "Scenario",
+    "origin": "practice",
     "question": "Would you use Spark to process a 20 MB CSV every morning?",
     "answer": "First check existing infrastructure, transformations, and latency requirements. A local script or SQL engine may be enough. Spark can still make sense if the pipeline already runs there, but distributed overhead needs a reason.",
     "followup": "What assumptions would change your answer?",
@@ -12,6 +13,7 @@
     "id": "practice-architecture",
     "topic": "architecture",
     "type": "Scenario",
+    "origin": "practice",
     "question": "The driver crashes after collect(), but executors have free memory. Why?",
     "answer": "collect() returns all rows to the driver. Diagnose the driver result size and heap rather than only executor capacity. Keep processing distributed, write results to storage, or inspect a bounded sample.",
     "followup": "Which Spark UI metric or plan operator would you inspect?",
@@ -21,6 +23,7 @@
     "id": "practice-dataframes",
     "topic": "dataframes",
     "type": "Concept",
+    "origin": "practice",
     "question": "Is Spark SQL slower than the DataFrame API?",
     "answer": "Not inherently. Both use Spark SQL’s engine. Compare the optimized and physical plans for equivalent expressions, plus runtime metrics and UDF use.",
     "followup": "What assumptions would change your answer?",
@@ -30,6 +33,7 @@
     "id": "practice-lazy-evaluation",
     "topic": "lazy-evaluation",
     "type": "Concept",
+    "origin": "practice",
     "question": "I wrote five transformations. How many jobs did I create?",
     "answer": "Transformation count alone cannot tell you. Ask which actions run, inspect the executed plan, and confirm in the Spark UI. Lazy transformations primarily build a plan.",
     "followup": "Which Spark UI metric or plan operator would you inspect?",
@@ -39,6 +43,7 @@
     "id": "practice-jobs-stages-tasks",
     "topic": "jobs-stages-tasks",
     "type": "Concept",
+    "origin": "practice",
     "question": "You have 200 tasks and 20 available slots. Will the stage take exactly ten task durations?",
     "answer": "Ten waves is only a lower-bound model for uniform tasks with no overhead. Skew, scheduling, I/O, retries, and contention affect actual completion time.",
     "followup": "What assumptions would change your answer?",
@@ -48,6 +53,7 @@
     "id": "practice-partitions-shuffles",
     "topic": "partitions-shuffles",
     "type": "Scenario",
+    "origin": "practice",
     "question": "Why did coalesce(1) make my write slow?",
     "answer": "It funnels output through one partition and can reduce upstream parallelism. Check file requirements; prefer a useful number of output partitions. A shuffle before the final write trades extra redistribution for parallel upstream work.",
     "followup": "Which Spark UI metric or plan operator would you inspect?",
@@ -57,6 +63,7 @@
     "id": "practice-joins-skew",
     "topic": "joins-skew",
     "type": "Scenario",
+    "origin": "practice",
     "question": "A join finishes 199 tasks quickly and one task takes 20 minutes. What do you inspect?",
     "answer": "Compare the slow task’s input and shuffle size, spill, and execution time. Check hot or null keys and join multiplicity. Consider adaptive skew handling where applicable; do not assume that adding executors splits a single hot partition.",
     "followup": "What assumptions would change your answer?",
@@ -66,6 +73,7 @@
     "id": "practice-cache-recovery",
     "topic": "cache-recovery",
     "type": "Concept",
+    "origin": "practice",
     "question": "Is caching every DataFrame a good way to speed up my pipeline?",
     "answer": "No. Identify repeated expensive computation, memory capacity, and reuse lifetime. Caching one-use intermediates can add overhead and pressure. Measure, inspect storage, and unpersist deliberately.",
     "followup": "Which Spark UI metric or plan operator would you inspect?",
@@ -117,8 +125,7 @@
     "type": "Scenario",
     "origin": "practice",
     "question": "Can filter followed by count require a shuffle even though filter is narrow?",
-    "answer": "The filter is local to each input partition, but the final count is global. Under this four-partition baseline I expect four tasks to filter and partially count, then a single downstream task to combine those counts. The answer is nine. I would verify the count query, rather than only explaining the filtered DataFrame.",
-    "followup": "If the filter removes every row, do the input tasks disappear?",
+    "exercise": "filter-count",
     "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
   },
   {
@@ -127,8 +134,7 @@
     "type": "Scenario",
     "origin": "practice",
     "question": "If a groupBy has three keys and four shuffle partitions, how many tasks and output files should I expect?",
-    "answer": "The aggregation needs compatible distribution by bucket, so I expect partial sums, a shuffle, and final sums. With AQE disabled and four shuffle partitions, I predict four downstream writer tasks even though there are only three keys. The Parquet call triggers the work, and tasks write to storage while the driver coordinates it. File count needs separate inspection.",
-    "followup": "Would coalesce(1) before writing be a good way to produce one large production file?",
+    "exercise": "groupby-write",
     "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
   },
   {
@@ -137,8 +143,7 @@
     "type": "Scenario",
     "origin": "practice",
     "question": "Does broadcasting a lookup remove every shuffle from a join followed by aggregation?",
-    "answer": "Broadcasting the tiny lookup lets the fact-side tasks perform this join without reshuffling orders for the join. The subsequent region aggregation still requires a shuffle. I would distinguish the broadcast exchange from the hash exchange in the plan, check the associated jobs, and validate that the lookup keys do not multiply rows.",
-    "followup": "If the lookup grows, should you keep the broadcast hint?",
+    "exercise": "join-aggregate",
     "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
   }
 ]

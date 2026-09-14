@@ -105,3 +105,21 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34805147063](https://github.com/anchitgupt/learn-spark/actions/runs/34805147063) completed successfully.
 - All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
 - Live lesson: https://anchitgupt.github.io/learn-spark/predict-execution.html
+
+# Content and check fixes — 2026-09-14
+
+## Content and build
+
+- Search results no longer index HTML. `_site/search.json` text is flattened with an HTML parser, so tags and entities (previously 10 of 28 entries, such as `&gt;` and link markup) are removed. All 28 entries are now markup-free.
+- Every question record carries `origin` (`reported` or `practice`), and `scripts/check.py` requires it. The eight original authored questions are marked `practice`.
+- The three prediction questions use `"exercise": "<id>"` and no longer copy the spoken answer and follow-up from `content/predictions.json`; the builder resolves that text at build time, and the checker rejects answers copied from an exercise.
+- Lesson pages label their chapter from a new `chapter` field in `content/lessons.json` instead of the hardcoded "FUNDAMENTALS": the capstone reads "CAPSTONE / LESSON 09" and the prediction lesson "PRACTICE / LESSON 10".
+- `scripts/build.py` resolves exercises, topics, and exercise-linked questions through one helper that exits with a readable message. Scratch copies with each of the three reference types corrupted exited with status 1 and named the file, record, and unknown ID; previously they raised bare `StopIteration` or `KeyError`.
+
+## Checks
+
+- `npm run build`: 14 static pages generated.
+- `npm run check`: PASS — 14 pages, 517 local links/assets, ten lesson schemas and example syntax, 15 question records, three prediction exercises, and JavaScript syntax. `git diff --check` was clean.
+- The 46-check Playwright browser pass was not run again for this batch; the changed output is covered by `scripts/check.py`.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
