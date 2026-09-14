@@ -201,3 +201,19 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34821294435](https://github.com/anchitgupt/learn-spark/actions/runs/34821294435) completed successfully.
 - All 28 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
 - Live lesson: https://anchitgupt.github.io/learn-spark/executor-memory.html
+# Spark UI lesson — 2026-09-14
+
+## Content
+
+- Added "Reading the Spark UI and fixing slow jobs" as the tenth fundamentals lesson (slug `spark-ui`, lesson 10 of 12), placed between "Executor memory, spill & out-of-memory errors" and the execution-flow capstone. Existing slugs and saved progress remain valid; the capstone and prediction lesson renumber to 11 and 12 automatically.
+- The lesson teaches a diagnosis order: Jobs tab to the longest job, Stages tab to the longest stage, per-task distribution (duration, input, shuffle, spill, GC) to separate general pressure from a straggler, SQL tab operator metrics (output rows, shuffle bytes, spill size, peak memory) to name the expensive operator, then fixes in layout → reuse → eligible AQE → configuration order.
+- Claims are tied to versioned 3.5.7 sources: the Web UI guide (Jobs/Stages/Storage/Executors/Environment/SQL tabs, stage summary metrics, SQL operator metrics), the tuning guide (2–3 tasks per core, reduce-task parallelism, locality levels), and the SQL performance tuning guide (shuffle partitions, AQE coalescing/broadcast/skew features, enabled by default since 3.2). The lesson deliberately avoids exact counts: it tells the reader to compare tasks against the median and read the stage rather than expect fixed numbers. The example was not executed in Spark on this machine, and the page says so.
+- Added two authored practice questions (`practice-spark-ui-slow-job`, `practice-spark-ui-straggler`); none is presented as a reported interview question.
+
+## Checks
+
+- `npm run build` and `npm run check`: 16 pages, 629 local links/assets, 12 lesson schemas and example syntax, 17 questions, three prediction exercises, JavaScript syntax pass; `git diff --check` clean.
+- `python3 scripts/browser_test.py`: 66 checks pass with the 16-page site.
+- axe-core 4.10.2 on the new lesson: zero violations at 1280 and 390 CSS pixels. Screenshots were inspected at both widths (`output/playwright/spark-ui-*.png`).
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

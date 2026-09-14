@@ -145,5 +145,25 @@
     "question": "Does broadcasting a lookup remove every shuffle from a join followed by aggregation?",
     "exercise": "join-aggregate",
     "source": "Original authored practice. The related prediction lesson contains the code, explicit baseline, expected flow, and verification steps; not reported by an interviewee."
+  },
+  {
+    "id": "practice-spark-ui-slow-job",
+    "topic": "spark-ui",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A Spark application is slow overall. Which UI screen do you open first, and what do you click next?",
+    "answer": "Start with the Jobs tab to find the longest-running job, open its detail page for the stage breakdown, then open the longest stage and compare per-task duration, input, shuffle, spill, and GC time. Cross to the SQL tab to name the expensive operator before changing code or configuration.",
+    "followup": "Which Spark UI metric or plan operator would you inspect?",
+    "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "practice-spark-ui-straggler",
+    "topic": "spark-ui",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "One task runs far longer than the stage median with large shuffle read and spill. What does that pattern suggest?",
+    "answer": "A skewed or oversized partition: one key or partition carries a disproportionate share of rows. Check hot or null keys and join multiplicity, compare the straggler against the median rather than the average, and fix the data layout or eligible skew handling before adding executors.",
+    "followup": "What assumptions would change your answer?",
+    "source": "Authored practice question; not a reported interview question."
   }
 ]
