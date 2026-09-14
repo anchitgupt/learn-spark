@@ -279,3 +279,10 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - axe-core 4.10.2 on `questions.html` with the guide expanded: zero violations at 1280 and 390 CSS pixels. The expanded guide screenshot was inspected (`output/playwright/senior-guide.png`).
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check (web questions, storage formats, and senior bank)
+
+- Implementation commits `6b946de` (web-inspired questions), `2fce063` (storage formats and file-format questions), and `f8a7a9b` (senior bank and guide) pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34838525509](https://github.com/anchitgupt/learn-spark/actions/runs/34838525509) and [34839144597](https://github.com/anchitgupt/learn-spark/actions/runs/34839144597) completed successfully.
+- All 31 public build files returned HTTP 200 and matched the local build byte for byte after deployment; the live questions page shows the 40-prompt, 7-group senior guide.
+- Live pages: https://anchitgupt.github.io/learn-spark/storage-formats.html and https://anchitgupt.github.io/learn-spark/questions.html
