@@ -4,7 +4,7 @@ A reading-first Spark fundamentals wiki and interview notebook for Anchit Gupta.
 
 ## Preview locally
 
-Requires Python 3.9+; Node.js is optional for the npm shortcuts and JavaScript syntax checks. No npm packages or installation step.
+Requires Python 3.9+; Node.js is optional for the npm shortcuts and JavaScript syntax checks. Building and previewing need no npm packages or installation step; the optional browser checks need a one-time Playwright install.
 
 ```sh
 python3 scripts/build.py
@@ -12,6 +12,16 @@ python3 -m http.server 4173 --bind 127.0.0.1 --directory _site
 ```
 
 Open http://127.0.0.1:4173. Alternatively, `npm run dev` builds and serves the site. Rebuild after changing source content or assets, then refresh. Use an HTTP server: browser storage and search are not guaranteed on `file://` URLs.
+
+### Optional browser checks
+
+Kept out of CI. The script serves the built `_site` itself and exercises the interactive behaviour: progress, disclosures, search, notebook export/import, filters, the walkthrough, the lab, mobile navigation, the no-JavaScript fallback, and responsive overflow.
+
+```sh
+python3 -m pip install playwright        # once
+python3 -m playwright install chromium   # once, or rely on an installed Chrome
+python3 scripts/browser_test.py          # or: npm run test:browser
+```
 
 ## What's included
 
@@ -26,7 +36,7 @@ Open http://127.0.0.1:4173. Alternatively, `npm run dev` builds and serves the s
 
 ## Add or change content
 
-Edit `content/lessons.json` for the published curriculum. Each lesson has a stable `slug`, `title`, `dek`, `minutes` (reading plus practice estimate), `idea`, `sections`, `code`, `output`, `pitfall`, `question`, `answer`, `sources`, `reviewed`, and `version`.
+Edit `content/lessons.json` for the published curriculum. Each les; for interactive changes, also run `python3 scripts/browser_test.py` (optional, local only)son has a stable `slug`, `title`, `dek`, `minutes` (reading plus practice estimate), `idea`, `sections`, `code`, `output`, `pitfall`, `question`, `answer`, `sources`, `reviewed`, and `version`.
 
 - Section `body` is trusted HTML maintained in the repository. Keep it semantic: paragraphs, lists, inline code, and links. Do not insert unreviewed third-party HTML.
 - `code` is a plain-text PySpark snippet; the generator escapes it automatically.

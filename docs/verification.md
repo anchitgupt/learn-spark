@@ -158,3 +158,17 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34818961223](https://github.com/anchitgupt/learn-spark/actions/runs/34818961223) completed successfully.
 - All 27 public build files returned HTTP 200 and matched the local build byte for byte after deployment.
 - Live lesson: https://anchitgupt.github.io/learn-spark/execution-flow.html
+
+# Browser test harness — 2026-09-14
+
+## What it covers
+
+`scripts/browser_test.py` (also `npm run test:browser`) serves the built `_site` on an ephemeral port and drives headless Playwright through 66 checks: all 14 pages load; completion progress seeds, toggles, and persists; prediction disclosures open by mouse and keyboard; the copy button copies exactly and confirms; search loads, finds the groupBy exercise, and dismisses; question filters and the no-match state; notebook add/edit/export/delete/import, including duplicate skipping and invalid-file rejection; the six-phase execution walkthrough; the visual lab step controls; mobile navigation and focus return; the no-JavaScript pass at phone width; a horizontal-overflow sweep at 320/390/768/1280 px with every disclosure open; and zero JavaScript console errors.
+
+## Checks
+
+- First run: `PASS: 66 browser checks passed` in about 5 seconds against the current build (Python Playwright 1.58, headless Chromium, reduced motion).
+- The harness is deliberately not part of the GitHub Actions workflow, which continues to run content, link, and JavaScript syntax checks only.
+- New-machine setup: `python3 -m pip install playwright` and `python3 -m playwright install chromium`; an installed Chrome is used as a fallback.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
