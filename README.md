@@ -27,7 +27,7 @@ python3 scripts/browser_test.py          # or: npm run test:browser
 
 - Twelve linked lessons: ten fundamentals, the complete execution-flow capstone, and a prediction practice lesson.
 - Original small PySpark examples, expected results, pitfalls, and interview explanations.
-- Seventeen interview prompts: one question reported by Anchit and sixteen authored practice prompts, clearly labeled with their provenance.
+- Twenty-nine interview prompts: one question reported by Anchit, sixteen authored practice prompts, and twelve web-inspired practice questions. Each new question includes an original answer, a follow-up, an inspiration link, and versioned Apache Spark references.
 - Three prediction exercises: filter/count, groupBy/write, and broadcast join/aggregate. Each has native answer reveals, a task-flow diagram, plan/UI checks, a spoken answer, and a follow-up. A separate AQE comparison explores how the baseline can change.
 - A six-phase interactive execution walkthrough with a full static reading fallback and a diagram separating resource allocation, task dispatch, and data movement.
 - SVG architecture and partition diagrams; a canvas shuffle/filter walkthrough; an original 12-second H.264 explainer with captions and a transcript.
@@ -36,7 +36,7 @@ python3 scripts/browser_test.py          # or: npm run test:browser
 
 ## Add or change content
 
-Edit `content/lessons.json` for the published curriculum. Each les; for interactive changes, also run `python3 scripts/browser_test.py` (optional, local only)son has a stable `slug`, `title`, `dek`, `minutes` (reading plus practice estimate), `idea`, `sections`, `code`, `output`, `pitfall`, `question`, `answer`, `sources`, `reviewed`, and `version`.
+Edit `content/lessons.json` for the published curriculum. Each lesson has a stable `slug`, `title`, `dek`, `minutes` (reading plus practice estimate), `idea`, `sections`, `code`, `output`, `pitfall`, `question`, `answer`, `sources`, `reviewed`, and `version`.
 
 - Section `body` is trusted HTML maintained in the repository. Keep it semantic: paragraphs, lists, inline code, and links. Do not insert unreviewed third-party HTML.
 - `code` is a plain-text PySpark snippet; the generator escapes it automatically.
@@ -45,8 +45,8 @@ Edit `content/lessons.json` for the published curriculum. Each les; for interact
 - Prediction exercises live in `content/predictions.json` and render through `scripts/predictions.py`. The lesson references their stable IDs in `exercises`; each record supplies code, prompts, reasoning, a flow, expected output, verification code/steps, spoken answer, follow-up, and source IDs from the lesson. Search links directly to each exercise. Keep setup and configuration assumptions consistent with the lesson.
 - The capstone phase summaries live in `content/execution-phases.json` and render through `scripts/flow.py`. Each phase links to a full lesson section.
 - Question `origin` is `reported` only for a user-reported interview question; otherwise use `practice`. Adding authored follow-ups does not make them reported questions.
-- `content/questions.json` holds published practice questions. Each question references a lesson slug and has a stable ID, type, question, answer, follow-up, and provenance.
-- Run `python3 scripts/build.py` and `npm run check` after changes. `_site/` is generated output, not the authoring source.
+- `content/questions.json` holds published practice questions. Each question references a lesson slug and has a stable ID, type, question, answer, follow-up, and provenance. Web-inspired questions remain `origin: "practice"` and add an `inspiration` title/URL pair, a `references` list of title/URL pairs for versioned Apache sources, `version`, and `reviewed` (ISO date). These links and the documentation-only review status render inside the answer disclosure; external interview lists are inspiration, not technical authority.
+- Run `python3 scripts/build.py` and `npm run check` after changes. For interactive changes, also run `python3 scripts/browser_test.py` (optional, local only). `_site/` is generated output, not the authoring source.
 
 For a new interview question, use **My notebook**. Saved questions are browser-local drafts, marked **Needs verification**. Export a JSON backup and provide the question and answer for review. Once reviewed, promote a corrected version into the published JSON with sources. The website itself has no AI verifier or GitHub write access.
 

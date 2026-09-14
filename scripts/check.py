@@ -2,6 +2,7 @@
 import ast
 import json
 import re
+from datetime import date
 from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -87,6 +88,19 @@ assert all(re.fullmatch(r'[a-z0-9-]+', q['id']) for q in questions)
 for q in questions:
     assert q['topic'] in slugs and q['source'], q['id'] + ': needs a known topic and a source'
     assert q.get('origin') in ('reported', 'practice'), q['id'] + ': origin must be "reported" or "practice"'
+    if 'inspiration' in q:
+        assert q['origin'] == 'practice', q['id'] + ': an online topic list is not a reported interview'
+        inspiration = q['inspiration']
+        url = urlsplit(inspiration['url'])
+        assert inspiration['title'].strip() and url.scheme == 'https' and url.netloc, q['id'] + ': needs a named HTTPS inspiration link'
+        assert q.get('references'), q['id'] + ': web-inspired questions need technical references'
+    if 'references' in q:
+        assert q['references'] and q.get('version') == 'Apache Spark 3.5.7', q['id'] + ': references need the Spark baseline'
+        assert date.fromisoformat(q['reviewed']).isoformat() == q['reviewed'], q['id'] + ': needs an ISO review date'
+        for ref in q['references']:
+            url = urlsplit(ref['url'])
+            official = (url.netloc == 'spark.apache.org' and url.path.startswith('/docs/3.5.7/')) or (url.netloc == 'github.com' and url.path.startswith('/apache/spark/blob/v3.5.7/'))
+            assert ref['title'].strip() and url.scheme == 'https' and official, q['id'] + ': use named, versioned Apache references'
     if 'exercise' in q:
         # Exercise-linked questions take the exercise's spoken answer and follow-up at build time.
         assert q['exercise'] in exercises and 'answer' not in q and 'followup' not in q, q['id'] + ': reference one known exercise instead of copying its answer'

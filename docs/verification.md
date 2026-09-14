@@ -224,3 +224,23 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34823257502](https://github.com/anchitgupt/learn-spark/actions/runs/34823257502) completed successfully.
 - All 29 public build files returned HTTP 200 and matched the local build byte for byte after deployment (one CSS fetch lagged the CDN on the first sweep, then matched on recheck).
 - Live lesson: https://anchitgupt.github.io/learn-spark/spark-ui.html
+
+# Web-inspired interview questions — 2026-09-14
+
+## Content and sources
+
+- Added 12 original practice questions inspired by public interview-topic lists from Adaface, DataCamp, and DataCodingHub. The bank now has 29 questions: one interview-reported, sixteen authored practice, and twelve web-inspired practice questions.
+- Topics: RDD map/flatMap, reduceByKey versus groupByKey, unionByName, null-safe joins, semi/anti joins, broadcast hint limits, RDD/DataFrame cache defaults, checkpoint reliability, accumulator retries, Python UDFs and Arrow, window ranking ties, and AQE versus dynamic allocation.
+- Each new record retains `origin: "practice"` and includes a question-inspiration link, versioned Apache technical references, the Spark 3.5.7 baseline, and the review date. Answers and follow-ups use original wording; online list answers were not imported as verified facts.
+- Checked the relevant Spark 3.5.7 API/guide pages and the versioned `AggUtils.scala` source for partial aggregation. Preserved qualifications around accumulator retries, join eligibility, null multiplicity, API-specific cache defaults, local checkpoint reliability, and Arrow UDF execution.
+- The new questions contain no runnable example blocks. Their explanations were checked against documentation/source, not executed in a Spark runtime. The card disclosures state this limitation and distinguish inspiration from technical evidence.
+
+## Implementation and validation
+
+- Source links, attribution, baseline, and review scope render within each new question's answer disclosure. Existing questions retain their previous provenance and lesson-source fallback.
+- The content checker validates inspiration metadata, practice provenance, review dates, and versioned Apache reference URLs. The browser suite checks reference association with each card, new-question search, and no-JavaScript access to references.
+- `npm run build`: 16 pages built.
+- `npm run check`: 16 pages, 644 local links/assets, 12 lesson schemas/examples, 29 questions, and 3 prediction exercises passed, plus JavaScript syntax checks.
+- `npm run test:browser`: all 69 checks passed, including every page at 320/390/768/1280 CSS pixels with disclosures open.
+- The first browser pass detected a 320 px overflow from the `pyspark.sql.DataFrame.localCheckpoint` reference title. Confirmed its right edge at 335.75 px, added wrapping within the reference list, and reran the full suite successfully.
+- No Spark runtime execution or publication was performed in this batch.

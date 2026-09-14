@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / '_site'
 LESSONS = json.loads((ROOT / 'content/lessons.json').read_text())
 QUESTIONS = json.loads((ROOT / 'content/questions.json').read_text())
+QUESTION_TOPICS = json.loads((ROOT / 'content/question-topics.json').read_text())
+SENIOR_GUIDE = json.loads((ROOT / 'content/senior-interview-guide.json').read_text())
 PHASES = json.loads((ROOT / 'content/execution-phases.json').read_text())
 PREDICTIONS = json.loads((ROOT / 'content/predictions.json').read_text())
 OUT.mkdir(exist_ok=True)
@@ -116,19 +118,50 @@ for i,l in enumerate(LESSONS):
     <button class="button primary js-only complete-button" data-lesson="{l['slug']}" aria-pressed="false">Mark as understood ✓</button><nav class="lesson-pagination" aria-label="Lesson navigation">{f'<a href="{prev["slug"]}.html"><small>← PREVIOUS</small>{e(prev["title"])}</a>' if prev else '<a href="index.html"><small>← BACK</small>Learning path</a>'}{f'<a href="{nxt["slug"]}.html"><small>NEXT →</small>{e(nxt["title"])}</a>' if nxt else '<a href="questions.html"><small>NEXT →</small>Interview practice</a>'}</nav></article><aside class="toc" aria-label="On this page"><span class="eyebrow">ON THIS PAGE</span>{toc}<a href="#try-it">{toc_practice}</a><a href="#explain-back">Explain it back</a><a href="#sources">Sources & verification</a><div class="toc-note">Don’t just remember it.<br>Build a mental model.</div></aside></div>''')
 
 def resolve_question(q):
-    lesson=find(LESSONS, 'slug', q['topic'], f'content/questions.json: question "{q["id"]}" references unknown topic "{q["topic"]}"')
+    topic = next((lesson for lesson in LESSONS if lesson['slug'] == q['topic']), None)
+    if topic is None:
+        if q['topic'] not in QUESTION_TOPICS:
+            raise SystemExit(f'content/questions.json: question "{q["id"]}" references unknown topic "{q["topic"]}"')
+        topic = {'title': QUESTION_TOPICS[q['topic']]}
     if 'exercise' in q:
         exercise=find(PREDICTIONS, 'id', q['exercise'], f'content/questions.json: question "{q["id"]}" references unknown exercise "{q["exercise"]}"')
-        return lesson, exercise['spoken'], exercise['followup']
-    return lesson, q['answer'], q['followup']
+        return topic, exercise['spoken'], exercise['followup']
+    return topic, q['answer'], q['followup']
+
+
+def question_sources(q):
+    note = f'<p class="code-note">{e(q["source"])}'
+    if not q.get('references'):
+        return note + ' Technical sources are linked in the related lesson.</p>'
+    note += f' Baseline: {e(q["version"])}. Technical claims checked against the linked documentation/source on {e(q["reviewed"])}; not runtime-tested. Design answers describe proposed approaches.</p>'
+    inspiration = q.get('inspiration')
+    if inspiration:
+        note += f'<p class="code-note">Question inspiration: <a href="{e(inspiration["url"], quote=True)}" target="_blank" rel="noreferrer">{e(inspiration["title"])} ↗</a>. Technical verification uses the Apache references below.</p>'
+    links = ''.join(f'<li><a href="{e(ref["url"], quote=True)}" target="_blank" rel="noreferrer">{e(ref["title"])} ↗</a></li>' for ref in q['references'])
+    return note + f'<div class="question-references"><strong>Technical references</strong><ul>{links}</ul></div>'
+
+
+def senior_guide():
+    if not SENIOR_GUIDE:
+        return ''
+    groups = []
+    for index, group in enumerate(SENIOR_GUIDE, 1):
+        items = []
+        for item in group['items']:
+            find(QUESTIONS, 'id', item['question'], f'senior guide: unknown question "{item["question"]}"')
+            items.append(f'<li><a href="#{e(item["question"])}">{e(item["prompt"])}</a></li>')
+        groups.append(f'<details><summary>{index:02} / {e(group["title"])} ({len(items)})</summary><ol>{"".join(items)}</ol></details>')
+    count = sum(len(group['items']) for group in SENIOR_GUIDE)
+    return f'<details class="senior-guide" id="senior-de"><summary>Senior DE interview bank · {count} prompts in {len(groups)} groups</summary><p>Use this index to work through the supplied prep bank. Overlapping prompts link to existing questions; answers correct the draft’s assumptions. Try answering before revealing the reasoning.</p>{"".join(groups)}</details>'
 
 
 cards=''
 for q in QUESTIONS:
     lesson, answer, followup = resolve_question(q)
-    origin = 'Interview-reported' if q.get('origin') == 'reported' else 'Authored practice'
-    cards+=f'''<article class="question-card" id="{q['id']}" data-type="{q['type']}" data-search="{e((q['question']+' '+answer+' '+lesson['title']).lower(),quote=True)}"><div class="question-meta"><span>{q['type']}</span><span class="question-origin">{origin}</span><a href="{q['topic']}.html">{e(lesson['title'])} ↗</a></div><h2>{e(q['question'])}</h2><details class="answer"><summary>Reveal the reasoning</summary><p>{e(answer)}</p><p><strong>Follow-up:</strong> {e(followup)}</p><p class="code-note">{e(q['source'])} Technical sources are linked in the related lesson.</p></details></article>'''
-page('questions','Interview questions',f'''<div class="collection"><div class="eyebrow">02 / PUT IT INTO PRACTICE</div><h1>Think it through.<br><em>Then say it out loud.</em></h1><p class="article-dek">A good answer explains the trade-off, not just the definition.</p><div class="collection-intro"><p>Interview-reported questions and authored practice are labeled separately. Keep your own drafts in <a href="notebook.html">your notebook ↗</a>.</p><a class="button" href="notebook.html#question-form">+ Add your own question</a></div><div class="filter-bar js-only"><label class="filter-search">Find a question<input type="search" id="question-search" placeholder="Search questions and answers…"></label><div class="filters" role="group" aria-label="Question type"><button class="active" aria-pressed="true" data-filter="All">All</button><button aria-pressed="false" data-filter="Scenario">Scenarios</button><button aria-pressed="false" data-filter="Concept">Concepts</button></div></div><p id="question-count" aria-live="polite">{len(QUESTIONS)} questions</p><div id="question-list">{cards}</div><p id="no-questions" hidden>No questions match. Try a different term or filter.</p></div>''')
+    origin = 'Interview-reported' if q.get('origin') == 'reported' else ('Supplied practice' if q.get('collection') == 'senior-de' else ('Web-inspired practice' if q.get('inspiration') else 'Authored practice'))
+    topic_label = f'<a href="{q["topic"]}.html">{e(lesson["title"])} ↗</a>' if 'slug' in lesson else f'<span>{e(lesson["title"])}</span>'
+    cards+=f'''<article class="question-card" id="{q['id']}" data-type="{q['type']}" data-search="{e((q['question']+' '+answer+' '+lesson['title']).lower(),quote=True)}"><div class="question-meta"><span>{q['type']}</span><span class="question-origin">{origin}</span>{topic_label}</div><h2>{e(q['question'])}</h2><details class="answer"><summary>Reveal the reasoning</summary><p>{e(answer)}</p><p><strong>Follow-up:</strong> {e(followup)}</p>{question_sources(q)}</details></article>'''
+page('questions','Interview questions',f'''<div class="collection"><div class="eyebrow">02 / PUT IT INTO PRACTICE</div><h1>Think it through.<br><em>Then say it out loud.</em></h1><p class="article-dek">A good answer explains the trade-off, not just the definition.</p><div class="collection-intro"><p>Interview-reported, authored, web-inspired, and supplied practice questions are labeled separately. Reviewed answers include technical references, a version baseline, and a review date. Keep your own drafts in <a href="notebook.html">your notebook ↗</a>.</p><a class="button" href="notebook.html#question-form">+ Add your own question</a></div>{senior_guide()}<div class="filter-bar js-only"><label class="filter-search">Find a question<input type="search" id="question-search" placeholder="Search questions and answers…"></label><div class="filters" role="group" aria-label="Question type"><button class="active" aria-pressed="true" data-filter="All">All</button><button aria-pressed="false" data-filter="Scenario">Scenarios</button><button aria-pressed="false" data-filter="Concept">Concepts</button></div></div><p id="question-count" aria-live="polite">{len(QUESTIONS)} questions</p><div id="question-list">{cards}</div><p id="no-questions" hidden>No questions match. Try a different term or filter.</p></div>''')
 
 options=''.join(f'<option value="{l["slug"]}">{e(l["title"])}</option>' for l in LESSONS)
 page('notebook','My notebook',f'''<div class="collection notebook"><div class="eyebrow">YOUR PERSONAL FIELDNOTES</div><h1>The question you<br><em>don’t want to forget.</em></h1><p class="article-dek">Capture it after the interview. Come back with a better answer.</p><div class="storage-note"><strong>Saved in this browser only.</strong> Export a backup to keep your questions or move devices. Browser storage can be cleared; notes are not synced to GitHub.</div><noscript><p>The personal notebook needs JavaScript to save and edit notes. Lessons and practice questions remain available without it.</p></noscript><div class="js-only"><div class="notebook-actions"><button id="export-notes" class="button">Export notebook ↓</button><label class="button import-label">Import notebook ↑<input type="file" id="import-notes" accept="application/json,.json"></label></div><form id="question-form"><h2 id="form-title">Add an interview question</h2><input type="hidden" id="editing-id"><label for="note-question">What were you asked?</label><textarea id="note-question" required maxlength="2000" rows="3" placeholder="A Spark job is stuck on the last task. How would you investigate?"></textarea><div class="form-row"><div><label for="note-topic">Related topic</label><select id="note-topic">{options}</select></div><div><label for="note-date">Interview date (optional)</label><input id="note-date" type="date"></div></div><label for="note-answer">Your answer or reasoning (optional)</label><textarea id="note-answer" maxlength="10000" rows="4" placeholder="My first instinct was… What I still need to verify…"></textarea><label for="note-source">Reference URL (optional)</label><input id="note-source" type="url" maxlength="2000" placeholder="https://spark.apache.org/docs/…"><p class="code-note">New notes are marked “Needs verification.” A saved source link is a reference, not an automatic fact-check.</p><div class="form-actions"><button class="button primary" type="submit">Save question</button><button class="button" type="button" id="cancel-edit" hidden>Cancel edit</button></div></form><div class="section-heading"><h2>Your questions</h2><span id="notes-count">0 saved</span></div><div id="notes-list"></div></div><section id="review-process" class="sources"><h2>A notebook that earns your trust</h2><p>Built-in lessons cite the versioned Apache Spark documentation used for review. Examples have expected results but are explicitly marked as not runtime-tested. Personal notes stay unverified until someone checks the actual claim and runtime.</p><ol><li>Capture the question and your reasoning here.</li><li>Export your notebook and provide the relevant questions for review.</li><li>Check the Spark version, official documentation, and a minimal reproduction.</li><li>Add the corrected explanation and sources to the repository’s lesson or question files, then rebuild the site.</li></ol><p>This static site does not contain an AI verifier. Never paste private employer data or confidential interview material into public repository content.</p></section></div>''')

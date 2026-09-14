@@ -257,6 +257,29 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     check('question answer reveals by mouse',
           page.locator('#practice-what-is-spark details.answer').evaluate('d => d.open'))
 
+    web_questions = [q for q in questions if q.get('inspiration')]
+    citation_errors = []
+    for q in web_questions:
+        card = page.locator(f'#{q["id"]}')
+        card.locator('details').evaluate('d => { d.open = true; }')
+        expected_links = [q['inspiration']] + q['references']
+        actual_links = card.locator('details a').evaluate_all(
+            'links => links.map(a => ({title: a.textContent, url: a.getAttribute("href")}))')
+        if (len(actual_links) != len(expected_links)
+                or any(actual['url'] != expected['url'] or expected['title'] not in actual['title']
+                       for actual, expected in zip(actual_links, expected_links))
+                or card.locator('.question-origin').text_content() != 'Web-inspired practice'
+                or q['reviewed'] not in card.locator('details').text_content()
+                or q['version'] not in card.locator('details').text_content()
+                or 'not runtime-tested' not in card.locator('details').text_content()):
+            citation_errors.append(q['id'])
+    check('web-inspired questions show their own attribution, references, and review scope',
+          bool(web_questions) and not citation_errors, ', '.join(citation_errors))
+    page.fill('#question-search', 'unionByName')
+    check('new unionByName question is searchable',
+          page.locator('#web-union-by-name').is_visible() and visible() == 1)
+    page.fill('#question-search', '')
+
     # ---------- notebook ----------
     report.section('Notebook')
     page.goto(url('notebook.html'))
@@ -384,6 +407,9 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     npage.goto(url('questions.html'))
     cards = npage.evaluate("document.querySelectorAll('.question-card:not([hidden])').length")
     check('question cards remain visible without JavaScript', cards == len(questions))
+    npage.locator('#web-checkpoint-vs-cache summary').click()
+    check('new question references are accessible without JavaScript',
+          npage.locator('#web-checkpoint-vs-cache .question-references a').first.is_visible())
 
     # ---------- responsive overflow ----------
     report.section('Responsive overflow (disclosures open)')

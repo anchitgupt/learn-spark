@@ -165,5 +165,297 @@
     "answer": "A skewed or oversized partition: one key or partition carries a disproportionate share of rows. Check hot or null keys and join multiplicity, compare the straggler against the median rather than the average, and fix the data layout or eligible skew handling before adding executors.",
     "followup": "What assumptions would change your answer?",
     "source": "Authored practice question; not a reported interview question."
+  },
+  {
+    "id": "web-rdd-map-flatmap",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "An RDD contains lines of text. How would map and flatMap change the shape of the tokenized result?",
+    "answer": "With map(lambda line: line.split()), each input line produces one list element in the output RDD. With flatMap(lambda line: line.split()), the words become individual output elements; a blank line can contribute none. These transformations do not themselves redistribute records between partitions. Choose the output shape needed by the next operation, rather than assuming flatMap is a faster map.",
+    "followup": "If a line contains three words, how many output elements does each operation produce?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "RDD transformations",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#transformations"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-rdd-reducebykey",
+    "topic": "partitions-shuffles",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "For an RDD of (customer_id, amount) pairs, why prefer reduceByKey over groupByKey when only a total is needed?",
+    "answer": "reduceByKey combines values within each partition before merging results for a key. For repeated keys, this can move much less data than grouping all their values and then summing. The reduction function must be associative and commutative; addition fits the intended aggregation, with floating-point rounding caveats. This is an RDD comparison: DataFrame groupBy(...).sum(...) can already use partial aggregation, so do not infer the same penalty from its name.",
+    "followup": "Why is averaging partial averages incorrect when the groups have different counts?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "pyspark.RDD.reduceByKey API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.RDD.reduceByKey.html"
+      },
+      {
+        "title": "SQL partial and final aggregation planning (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/aggregate/AggUtils.scala"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-union-by-name",
+    "topic": "dataframes",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Two daily DataFrames contain the same columns in a different order. How do you append them without mixing up values?",
+    "answer": "DataFrame.union resolves columns by position, so compatible types can hide a column-order mistake. unionByName aligns column names. Use allowMissingColumns=True only when filling absent fields with null is acceptable, and check schema types explicitly. Neither operation removes duplicate rows automatically; add a separate deduplication step only if the business rule calls for it.",
+    "followup": "How would you distinguish a genuinely absent field from an unexpected upstream schema change?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCodingHub: PySpark interview topics",
+      "url": "https://www.datacodinghub.com/blog/top-50-pyspark-interview-questions-2026"
+    },
+    "references": [
+      {
+        "title": "pyspark.sql.DataFrame.union API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.union.html"
+      },
+      {
+        "title": "pyspark.sql.DataFrame.unionByName API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.unionByName.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-null-safe-join",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Both tables have null customer IDs. Will an equality join match those rows, and should you make it do so?",
+    "answer": "Ordinary equality with null evaluates to unknown, so an inner join on equality does not match null keys. PySpark Column.eqNullSafe, or SQL <=>, matches null with null. Use it only when that matches the business meaning of missing IDs. If the left side has m null keys and the right has n, null-safe equality can produce m × n matches; replacing nulls with a shared sentinel can cause the same multiplication.",
+    "followup": "Why would using null-safe equality to recover missing matches create both correctness and performance risks?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCodingHub: PySpark interview topics",
+      "url": "https://www.datacodinghub.com/blog/top-50-pyspark-interview-questions-2026"
+    },
+    "references": [
+      {
+        "title": "SQL null comparison and join semantics",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-null-semantics.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-semi-anti-join",
+    "topic": "joins-skew",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "You need customers who have an order, but no order columns. Which join avoids duplicating customers for every matching order?",
+    "answer": "A left semi join keeps each left-side row that has a match without returning right-side columns or multiplying it for multiple right matches. A left anti join keeps left rows with no match. Neither operation deduplicates duplicate rows already present on the left. Choose the join condition deliberately: under ordinary equality, null keys do not match null keys.",
+    "followup": "If one customer row appears twice on the left, does a semi join make it unique?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCodingHub: PySpark interview topics",
+      "url": "https://www.datacodinghub.com/blog/top-50-pyspark-interview-questions-2026"
+    },
+    "references": [
+      {
+        "title": "Left semi and left anti joins",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-join.html"
+      },
+      {
+        "title": "Null join conditions",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-null-semantics.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-broadcast-hint-limits",
+    "topic": "joins-skew",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "Does adding a BROADCAST hint guarantee a broadcast hash join, even above the automatic size threshold?",
+    "answer": "The hint prioritizes broadcasting the specified relation even when its estimated size exceeds spark.sql.autoBroadcastJoinThreshold. It does not guarantee a hash join: the join type must be supported, and a join without equality keys may use a broadcast nested loop strategy. Check the selected operator and whether the relation can be materialized safely; a hint is not a memory reservation or proof that broadcasting is cheap.",
+    "followup": "Which operator would you look for if the join condition only compares one value as greater than another?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "Join strategy hints",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#join-strategy-hints-for-sql-queries"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-cache-storage-defaults",
+    "topic": "cache-recovery",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "Do PySpark RDD.cache() and DataFrame.cache() use the same storage level in Spark 3.5.7?",
+    "answer": "No. RDD.cache() uses MEMORY_ONLY, while DataFrame.cache() uses MEMORY_AND_DISK_DESER in this version. persist(...) lets you choose a storage level explicitly. Cached data is populated as actions compute it; calling cache() alone does not prove the full dataset is stored. Inspect the storage level and materialized partitions, and release cached data with unpersist() when its reuse ends.",
+    "followup": "What happens to an uncached RDD partition when a MEMORY_ONLY cache cannot hold it?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "pyspark.RDD.cache API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.RDD.cache.html"
+      },
+      {
+        "title": "pyspark.sql.DataFrame.cache API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.cache.html"
+      },
+      {
+        "title": "RDD persistence and recomputation",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#rdd-persistence"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-checkpoint-vs-cache",
+    "topic": "cache-recovery",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "An iterative batch DataFrame pipeline has a growing logical plan. How does checkpoint differ from cache and localCheckpoint?",
+    "answer": "Caching reuses computed data while retaining the dependencies needed for recomputation. DataFrame.checkpoint() returns a DataFrame with a truncated logical plan and writes checkpoint files to the directory configured with SparkContext.setCheckpointDir(); use reliable shared storage on a cluster. localCheckpoint() also truncates the plan but stores data through executor caching, so losing that data can prevent recovery. A batch checkpoint does not by itself restart the driver application or supply streaming recovery semantics.",
+    "followup": "Why can replacing a reliable checkpoint with localCheckpoint make executor loss unrecoverable?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCamp: PySpark interview topics",
+      "url": "https://www.datacamp.com/blog/pyspark-interview-questions"
+    },
+    "references": [
+      {
+        "title": "pyspark.sql.DataFrame.checkpoint API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.checkpoint.html"
+      },
+      {
+        "title": "pyspark.sql.DataFrame.localCheckpoint API",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.localCheckpoint.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-accumulator-retries",
+    "topic": "jobs-stages-tasks",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "You increment an accumulator inside an RDD map to count rejected rows. Is that a reliable final business total?",
+    "answer": "Not by itself. A lazy map does not run until required by an action, and accumulator updates inside transformations may be applied again when tasks or stages are re-executed. Spark documents a once-per-task update guarantee for updates performed inside actions only; that is not a guarantee across repeated application actions. For a business total, represent rejected rows in the data and compute the count as a query result. Use transformation accumulators as diagnostic signals.",
+    "followup": "Why can the counter still be zero immediately after defining the map?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "Accumulator execution and retry guarantees",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#accumulators"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-python-udf-arrow",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "A Python UDF performs a string operation available as a built-in expression. Would enabling Arrow make the two equivalent?",
+    "answer": "Prefer the built-in expression when its semantics fit: Spark can execute and optimize that expression without calling your Python function. Arrow improves data transfer and serialization across the Python boundary; it does not translate Python code into a built-in SQL expression. In Spark 3.5.7, an Arrow-enabled ordinary Python UDF still runs its function row by row, while a pandas UDF uses a different, batch-oriented interface. Check null handling and return types, and measure the actual workload.",
+    "followup": "Why does useArrow=True on a scalar Python UDF not turn its function into a vectorized pandas operation?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCodingHub: PySpark interview topics",
+      "url": "https://www.datacodinghub.com/blog/top-50-pyspark-interview-questions-2026"
+    },
+    "references": [
+      {
+        "title": "Arrow Python UDFs and pandas UDFs",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-window-ranking-ties",
+    "topic": "dataframes",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "You need the latest order per customer. Why use a window, and what happens when two orders share a timestamp?",
+    "answer": "A window can rank rows within each customer while preserving the order columns. Use row_number over a window partitioned by customer and ordered by timestamp descending, then keep row number 1. If timestamps tie, include a stable unique tie-breaker such as order_id to make the selected row well-defined. If the requirement is to return all orders tied for latest, use rank or dense_rank and keep rank 1 instead.",
+    "followup": "For the values 100, 100, 90, how do row_number, rank, and dense_rank differ?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "DataCamp: PySpark interview topics",
+      "url": "https://www.datacamp.com/blog/pyspark-interview-questions"
+    },
+    "references": [
+      {
+        "title": "Window ranking functions",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-window.html"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "web-aqe-vs-dynamic-allocation",
+    "topic": "spark-ui",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "Are adaptive query execution and dynamic executor allocation two names for the same optimization?",
+    "answer": "No. AQE changes eligible parts of a SQL physical plan using runtime statistics, such as combining small post-shuffle partitions or changing join strategy. Dynamic allocation changes how many executors the application requests and releases as workload demand changes. One changes execution planning; the other changes available resources. They can work together, but enabling one does not enable the other. Inspect the executed SQL plan for AQE and executor events for allocation changes.",
+    "followup": "Why can adding executors leave one oversized task as the stage bottleneck?",
+    "source": "Original practice wording inspired by a public interview-topic list; not reported as an actual interview question.",
+    "inspiration": {
+      "title": "Adaface: Spark interview topics",
+      "url": "https://www.adaface.com/blog/spark-interview-questions/"
+    },
+    "references": [
+      {
+        "title": "Adaptive query execution",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#adaptive-query-execution"
+      },
+      {
+        "title": "Dynamic resource allocation",
+        "url": "https://spark.apache.org/docs/3.5.7/job-scheduling.html#dynamic-resource-allocation"
+      }
+    ],
+    "reviewed": "2026-09-14",
+    "version": "Apache Spark 3.5.7"
   }
 ]

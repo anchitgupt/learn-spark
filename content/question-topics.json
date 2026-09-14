@@ -1,0 +1,6 @@
+{
+  "delta-lake": "Delta Lake transactions & maintenance",
+  "storage-formats": "Storage formats & file layout",
+  "structured-streaming": "Structured Streaming",
+  "pipeline-design": "Senior pipeline design"
+}
