@@ -937,3 +937,20 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - [GitHub Pages deployment 34937919819](https://github.com/anchitgupt/learn-spark/actions/runs/34937919819) completed successfully (build and deploy jobs).
 - All 40 public build files returned HTTP 200 and matched the local build byte for byte on the first pass after deployment.
 - Live pages include https://anchitgupt.github.io/learn-spark/structured-streaming.html, https://anchitgupt.github.io/learn-spark/count-spark-work.html, and https://anchitgupt.github.io/learn-spark/questions.html
+
+# Q&A sheet — 2026-09-15
+
+## Content and implementation
+
+- Added `qa.html`, a Q&A sheet generated from `content/questions.json`: all 145 questions in lesson order, each with its answer and follow-up visible at rest (exercise-linked cards also show the follow-up answer), its type and provenance badges, a "Ran on PySpark 3.5.7" badge where the card or exercise records a local run, and a link to its card for sources and review notes. Each lesson section links to the lesson.
+- `assets/qa.js` adds search, type filters, a quiz mode that hides answers until revealed, "Only run on Spark", and browser-local "Can answer" marks with per-lesson counts in the sidebar and a "Hide answered" filter. Marks use their own storage key (`spark-fieldnotes-qa-v1`), so the notebook's storage, export, and import format are unchanged. Without JavaScript the sheet stays fully readable and the controls are hidden.
+- The sidebar links the sheet under "Put it into practice"; the questions page intro links to it. The page reuses the lesson layout, with a lessons sidebar on desktop and a "Jump to a lesson" list at phone width.
+
+## Checks
+
+- `npm run build` and `npm run check`: 25 pages, 1,799 local links/assets, 20 lesson schemas and examples, 53 Python blocks, 145 questions, 11 exercises; the checker now requires every question on the sheet; JavaScript syntax pass (including `assets/qa.js`, also added to the Pages workflow); `git diff --check` clean.
+- `python3 scripts/browser_test.py`: 93 checks pass, adding the sheet's question and section counts, the Design filter, search hiding empty lessons, quiz mode and single-answer reveal, a "Can answer" mark persisting across reload with the lesson count, "Hide answered", and no-JavaScript reading, plus the overflow sweep at 320, 390, 768, and 1280 CSS pixels.
+- The first browser run found the three study toggles squeezed onto the filter row and overflowing under the lessons sidebar, which intercepted clicks; the control groups now stack as full-width rows.
+- axe-core 4.13.0 on `qa.html` (normal and quiz mode) and `questions.html`: zero violations at 1280 and 390 CSS pixels. Desktop and phone screenshots were inspected; they showed lesson labels inheriting the article paragraph size, fixed with a more specific rule.
+
+Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.

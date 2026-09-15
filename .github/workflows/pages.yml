@@ -22,6 +22,7 @@ jobs:
           node --check assets/app.js
           node --check assets/lab.js
           node --check assets/flow.js
+          node --check assets/qa.js
       - uses: actions/upload-pages-artifact@v4
         if: github.event_name != 'pull_request'
         with:

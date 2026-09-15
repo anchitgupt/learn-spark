@@ -15,7 +15,7 @@ Open http://127.0.0.1:4173. Alternatively, `npm run dev` builds and serves the s
 
 ### Optional browser checks
 
-Kept out of CI. The script serves the built `_site` itself and exercises the interactive behaviour: progress, disclosures, search, notebook export/import, filters, the walkthrough, the lab, mobile navigation, the no-JavaScript fallback, and responsive overflow.
+Kept out of CI. The script serves the built `_site` itself and exercises the interactive behaviour: progress, disclosures, search, notebook export/import, filters, the Q&A sheet, the walkthrough, the lab, mobile navigation, the no-JavaScript fallback, and responsive overflow.
 
 ```sh
 python3 -m pip install playwright        # once
@@ -31,6 +31,7 @@ python3 scripts/browser_test.py          # or: npm run test:browser
 - Eleven exercises. Three prediction exercises (filter/count, groupBy/write, broadcast join/aggregate) have native answer reveals, a task-flow diagram, plan/UI checks, a spoken answer, and a follow-up, plus a separate AQE comparison. Eight counting exercises add job, stage, and task counts measured through the Spark UI REST API with AQE on and off.
 - A six-phase interactive execution walkthrough with a full static reading fallback and a diagram separating resource allocation, task dispatch, and data movement.
 - SVG architecture, partition, Parquet layout, Delta transaction log, and streaming micro-batch diagrams; a canvas shuffle/filter walkthrough; an original 12-second H.264 explainer with captions and a transcript.
+- A Q&A sheet (`qa.html`) with every question, answer, and follow-up in lesson order, plus search, type filters, a quiz mode that hides answers until revealed, and browser-local “can answer” marks counted per lesson.
 - Search, completion tracking, and a personal interview notebook with add/edit/delete and JSON import/export.
 - Readable static lessons and questions when JavaScript is disabled; mobile navigation and keyboard controls.
 
@@ -79,7 +80,7 @@ Treat pasted AI answers as drafts to verify. Preserve the question's provenance,
 
 ## Notebook backups and limitations
 
-Notes and completion are stored under `spark-fieldnotes-v1` in localStorage. The JSON export includes a schema version, completed lesson slugs, and notes. It is not uploaded or synced. Other applications on the same GitHub Pages origin can technically access browser storage; this is a personal study notebook, not secure document storage.
+Notes and completion are stored under `spark-fieldnotes-v1` in localStorage. Q&A sheet “can answer” marks are stored separately under `spark-fieldnotes-qa-v1` and are not part of the notebook export. The JSON export includes a schema version, completed lesson slugs, and notes. It is not uploaded or synced. Other applications on the same GitHub Pages origin can technically access browser storage; this is a personal study notebook, not secure document storage.
 
 - Export before clearing browser data or switching devices.
 - Imports validate structure, lengths, IDs, known topics, and http/https reference URLs. Files above 5 MB and notebooks above 1,000 notes are rejected.

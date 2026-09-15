@@ -64,7 +64,7 @@ class Page(HTMLParser):
 
 pages = {p.name: Page(p) for p in OUT.glob('*.html')}
 lessons = json.loads((ROOT / 'content/lessons.json').read_text())
-assert len(pages) == len(lessons) + 4, 'Build all lesson and collection pages first'
+assert len(pages) == len(lessons) + 5, 'Build all lesson and collection pages first'
 checks = 0
 for filename, page in pages.items():
     assert page.h1 == 1, filename + ': expected one h1'
@@ -134,6 +134,7 @@ for q in questions:
     else:
         assert q.get('answer') and q.get('followup'), q['id'] + ': needs an answer and follow-up'
         assert all(q['answer'] != item['spoken'] for item in predictions), q['id'] + ': copies an exercise answer; reference it with "exercise"'
+assert all('qa-' + q['id'] in pages['qa.html'].ids for q in questions), 'the Q&A sheet must include every question'
 guide = json.loads((ROOT / 'content/senior-interview-guide.json').read_text())
 guide_ids = []
 known_ids = {q['id'] for q in questions}

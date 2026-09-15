@@ -348,6 +348,46 @@ def run_checks(browser, base, report, lessons, pages, exercises, questions):
     check('a guide prompt link reaches its question card',
           page.url.endswith('#flow-reported') and page.locator('#flow-reported').count() == 1)
 
+    # ---------- Q&A sheet ----------
+    report.section('Q&A sheet')
+    page.goto(url('qa.html'))
+    page.evaluate("localStorage.removeItem('spark-fieldnotes-qa-v1')")
+    page.reload()
+    qa_visible = lambda: page.evaluate("document.querySelectorAll('.qa-item:not([hidden])').length")
+    check(f'the sheet lists all {len(questions)} questions with answers visible',
+          page.locator('.qa-item').count() == len(questions) and qa_visible() == len(questions)
+          and page.locator('.qa-item .qa-answer').first.is_visible())
+    check('the sheet has one section per lesson with questions',
+          page.locator('[data-qa-section]').count() == len({q['topic'] for q in questions}))
+    design_count = sum(1 for q in questions if q['type'] == 'Design')
+    page.click('[data-qa-filter="Design"]')
+    check(f'the Design filter shows {design_count} questions', qa_visible() == design_count
+          and page.locator('#qa-count').text_content().strip() == f'Showing {design_count} of {len(questions)}')
+    page.click('[data-qa-filter="All"]')
+    page.fill('#qa-search', 'watermark')
+    check('search narrows the sheet and hides empty lessons', 0 < qa_visible() < len(questions) and page.evaluate(
+        "[...document.querySelectorAll('[data-qa-section]')].every(s => s.hidden === !s.querySelector('.qa-item:not([hidden])'))"))
+    page.fill('#qa-search', '')
+    first = page.locator('.qa-item').first
+    page.click('#qa-quiz')
+    check('quiz mode hides answers', not first.locator('.qa-answer').is_visible())
+    first.locator('.qa-reveal').click()
+    check('reveal shows one answer', first.locator('.qa-answer').is_visible()
+          and first.locator('.qa-reveal').get_attribute('aria-expanded') == 'true'
+          and not page.locator('.qa-item').nth(1).locator('.qa-answer').is_visible())
+    page.click('#qa-quiz')
+    first_id = first.get_attribute('id')[3:]
+    first_topic = first.get_attribute('data-qa-topic')
+    first.locator('[data-qa-known]').check()
+    page.reload()
+    topic_total = sum(1 for q in questions if q['type'] and q['topic'] == first_topic)
+    check('a can-answer mark persists and updates the lesson count',
+          page.locator(f'#known-{first_id}').is_checked()
+          and page.locator(f'.qa-toc [data-qa-count="{first_topic}"]').text_content().strip() == f'1/{topic_total}')
+    page.click('#qa-hide-known')
+    check('hide answered removes marked questions', page.locator(f'#qa-{first_id}').is_hidden())
+    page.evaluate("localStorage.removeItem('spark-fieldnotes-qa-v1')")
+
     # ---------- notebook ----------
     report.section('Notebook')
     page.goto(url('notebook.html'))
@@ -479,6 +519,11 @@ def run_checks(browser, base, report, lessons, pages, exercises, questions):
     check('new question references are accessible without JavaScript',
           npage.locator('#web-checkpoint-vs-cache .question-references a').first.is_visible())
 
+    npage.goto(url('qa.html'))
+    check('the Q&A sheet reads without JavaScript',
+          npage.evaluate("document.querySelectorAll('.qa-item .qa-answer').length") == len(questions)
+          and npage.locator('.qa-item .qa-answer').first.is_visible() and display('.qa-reveal') == 'none')
+
     # ---------- responsive overflow ----------
     report.section('Responsive overflow (disclosures open)')
     for width in WIDTHS:
@@ -514,7 +559,7 @@ def main():
     lessons = json.loads((ROOT / 'content/lessons.json').read_text())
     questions = json.loads((ROOT / 'content/questions.json').read_text())
     exercises = json.loads((ROOT / 'content/predictions.json').read_text())
-    pages = ['index.html'] + [f"{lesson['slug']}.html" for lesson in lessons] + ['lab.html', 'questions.html', 'notebook.html']
+    pages = ['index.html'] + [f"{lesson['slug']}.html" for lesson in lessons] + ['lab.html', 'questions.html', 'qa.html', 'notebook.html']
 
     report = Report()
     started = time.time()
