@@ -954,3 +954,10 @@ Publication status is recorded by the GitHub Actions deployment run; live assets
 - axe-core 4.13.0 on `qa.html` (normal and quiz mode) and `questions.html`: zero violations at 1280 and 390 CSS pixels. Desktop and phone screenshots were inspected; they showed lesson labels inheriting the article paragraph size, fixed with a more specific rule.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check (Q&A sheet)
+
+- Implementation commit `cab5674` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34939316216](https://github.com/anchitgupt/learn-spark/actions/runs/34939316216) completed successfully (build and deploy jobs).
+- All 42 public build files returned HTTP 200 and matched the local build byte for byte on the first pass after deployment.
+- Live page: https://anchitgupt.github.io/learn-spark/qa.html
