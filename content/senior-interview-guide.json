@@ -174,6 +174,64 @@
     ]
   },
   {
+    "title": "Delta Lake and storage",
+    "items": [
+      {
+        "prompt": "How does Delta give ACID on object storage?",
+        "question": "delta-acid-object-storage"
+      },
+      {
+        "prompt": "MERGE performance: what does it cost?",
+        "question": "delta-merge-cost"
+      },
+      {
+        "prompt": "Z-ordering versus partitioning",
+        "question": "delta-zorder-vs-partitioning"
+      },
+      {
+        "prompt": "OPTIMIZE and VACUUM",
+        "question": "delta-optimize-vacuum"
+      },
+      {
+        "prompt": "Parquet versus ORC versus Avro",
+        "question": "senior-parquet-orc-avro"
+      },
+      {
+        "prompt": "Why is the small-file problem so damaging?",
+        "question": "senior-small-files"
+      }
+    ]
+  },
+  {
+    "title": "Structured Streaming",
+    "items": [
+      {
+        "prompt": "Micro-batch versus continuous processing",
+        "question": "stream-microbatch-vs-continuous"
+      },
+      {
+        "prompt": "How does Structured Streaming achieve exactly-once?",
+        "question": "stream-exactly-once"
+      },
+      {
+        "prompt": "Watermarks and late data",
+        "question": "stream-watermarks-late-data"
+      },
+      {
+        "prompt": "Output modes: append, update, complete",
+        "question": "stream-output-modes"
+      },
+      {
+        "prompt": "What lives in the checkpoint directory?",
+        "question": "stream-checkpoint-contents"
+      },
+      {
+        "prompt": "Trigger types",
+        "question": "stream-trigger-types"
+      }
+    ]
+  },
+  {
     "title": "PySpark specifics",
     "items": [
       {
@@ -191,6 +249,89 @@
       {
         "prompt": "Where does Python memory come from?",
         "question": "senior-memory-overhead"
+      }
+    ]
+  },
+  {
+    "title": "Coding round",
+    "items": [
+      {
+        "prompt": "Deduplicate keeping the latest record per key",
+        "question": "coding-dedup-latest"
+      },
+      {
+        "prompt": "Sessionize events with a 30-minute inactivity gap",
+        "question": "coding-sessionize"
+      },
+      {
+        "prompt": "Compute a running 7-day active user count",
+        "question": "coding-rolling-active-users"
+      },
+      {
+        "prompt": "Implement SCD Type 2 with a Delta MERGE",
+        "question": "coding-scd2-merge"
+      },
+      {
+        "prompt": "Join a stream to a slowly changing dimension",
+        "question": "coding-stream-scd-join"
+      },
+      {
+        "prompt": "Top N per group, and why orderBy().limit() on the whole frame is wrong",
+        "question": "coding-top-n-per-group"
+      },
+      {
+        "prompt": "Flatten a deeply nested JSON or array-of-structs column",
+        "question": "coding-flatten-nested-json"
+      }
+    ]
+  },
+  {
+    "title": "Design and scenario",
+    "items": [
+      {
+        "prompt": "Design CDC ingestion of 500 GB/day from MongoDB into a lakehouse",
+        "question": "design-cdc-mongodb"
+      },
+      {
+        "prompt": "A 40-minute nightly job now takes 4 hours with no code change",
+        "question": "design-slow-nightly"
+      },
+      {
+        "prompt": "Batch or streaming for a 5-minute freshness requirement?",
+        "question": "design-freshness-5min"
+      },
+      {
+        "prompt": "Data quality checks that fail loudly without blocking consumers",
+        "question": "design-dq-loud"
+      },
+      {
+        "prompt": "Multi-tenant access control over a shared lakehouse",
+        "question": "design-multitenant-acl"
+      },
+      {
+        "prompt": "Backfill a partitioned table without double-counting",
+        "question": "design-backfill"
+      },
+      {
+        "prompt": "Recover from three days of corrupt Bronze data",
+        "question": "design-corrupt-bronze"
+      }
+    ]
+  },
+  {
+    "title": "Prep: incident stories",
+    "items": [
+      {
+        "prompt": "A skew fix with before and after numbers",
+        "question": "story-skew-fix"
+      },
+      {
+        "prompt": "A cost or runtime reduction",
+        "question": "story-cost-runtime"
+      },
+      {
+        "prompt": "A correctness bug you caught",
+        "question": "story-correctness-bug"
       }
     ]
   }

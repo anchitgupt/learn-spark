@@ -10,6 +10,15 @@ def code_block(code):
     )
 
 
+def output_html(text):
+    """Printed blocks (several lines) stay preformatted; prose chunks become paragraphs."""
+    chunks = [chunk for chunk in text.strip().split('\n\n') if chunk.strip()]
+    return ''.join(
+        f'<pre class="output-text">{e(chunk)}</pre>' if '\n' in chunk.strip('\n') else f'<p>{e(chunk)}</p>'
+        for chunk in chunks
+    )
+
+
 def render_exercise(exercise, index):
     prompts = ''.join(f'<li>{e(prompt)}</li>' for prompt in exercise['prompts'])
     reasoning = ''.join(f'<p>{e(item)}</p>' for item in exercise['reasoning'])
@@ -22,9 +31,14 @@ def render_exercise(exercise, index):
         f'<a href="#source-{e(source)}">{e(source.replace("-", " "))}</a>'
         for source in exercise['sources']
     )
+    observed = exercise.get('observed')
+    flow_note = ('Flow summarized from the recorded local run described below.' if observed
+                 else 'Conceptual flow under the shared baseline; not a captured Spark UI trace.')
+    counts = (f'<div class="expected"><strong>Observed jobs, stages, and tasks</strong><p>{e(observed)}</p></div>'
+              if observed else '')
     return (
         f'<section class="prediction-exercise" id="{e(exercise["id"])}">'
-        f'<span class="eyebrow">EXERCISE {index:02} / AUTHORED PRACTICE</span>'
+        f'<span class="eyebrow">EXERCISE {index:02} / {e(exercise.get("label", "AUTHORED PRACTICE"))}</span>'
         f'<h2>{e(exercise["title"])}</h2><p>{e(exercise["intro"])}</p>'
         '<p class="code-note">Run the shared setup above first. Predict before running this snippet.</p>'
         + code_block(exercise['code']) +
@@ -32,9 +46,9 @@ def render_exercise(exercise, index):
         f'<ol>{prompts}</ol><p>Say or write your prediction before revealing the answer.</p></div>'
         f'<details class="answer prediction-answer"><summary>Reveal the reasoning: {e(exercise["title"])}</summary>'
         '<div class="prediction-body"><h3>Follow the work</h3>'
-        '<p class="code-note">Conceptual flow under the shared baseline; not a captured Spark UI trace.</p>'
+        f'<p class="code-note">{flow_note}</p>'
         f'<ol class="prediction-flow" aria-label="Expected execution flow">{flow}</ol>'
-        f'{reasoning}<div class="expected"><strong>Expected result</strong><p>{e(exercise["output"])}</p></div>'
+        f'{reasoning}<div class="expected"><strong>{"Observed result" if observed else "Expected result"}</strong>{output_html(exercise["output"])}</div>{counts}'
         '<h3>Check the plan and Spark UI</h3>' + code_block(exercise['verify_code']) +
         f'<ol>{evidence}</ol><h3>A short interview answer</h3><p>{e(exercise["spoken"])}</p>'
         f'<details class="answer followup-answer"><summary>Interviewer follow-up: {e(exercise["followup"])}</summary>'

@@ -89,3 +89,7 @@
 .prediction-flow span{font-size:12px;margin-top:4px}
 @media(max-width:700px){.exercise-jumps{display:grid}.exercise-jumps a{font-size:13px}.prediction-prompts{padding:17px}.prediction-body{padding:2px 16px 20px}.prediction-answer>summary{padding:16px;font-size:13px}.prediction-flow li{padding:12px}.prediction-body h3{font-size:21px}}
 .back-link{padding-block:4px}.text-link{display:inline-block;padding-block:5px}.site-footer a{display:inline-block;padding-block:6px}.sources li a{display:inline-block;padding-block:4px}.question-meta a{display:inline-block;padding-block:5px}.pitfall p{color:#626860}.architecture a{display:block}.search-trigger kbd::before{content:"⌘ K"}
+.lesson-group{font-family:var(--mono);font-size:9px;letter-spacing:1.2px;color:#666c61;margin:26px 0 8px}.lesson-group:first-child{margin-top:4px}
+.answer p{overflow-wrap:anywhere}
+.expected pre.output-text{font-family:var(--mono);font-size:12px;line-height:1.5;white-space:pre;overflow-x:auto;margin:8px 0;padding:0;background:transparent;border:0;max-width:100%}
+.filters{flex-wrap:wrap}.pitfall p,.article h2{overflow-wrap:anywhere}

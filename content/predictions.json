@@ -144,5 +144,405 @@
       "aggregate-planning",
       "collect-api"
     ]
+  },
+  {
+    "id": "count-csv-read-write",
+    "title": "CSV read → count → write",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet questions 1 and 8 merged: read a headered CSV with inferSchema, count it, and write it to Parquet. How many jobs run before count() is even called?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"csv-read\")\ndf = spark.read.csv(ORDERS_CSV, header=True, inferSchema=True)\n\nlabel(\"csv-count\")\nprint(df.count())\n\nlabel(\"csv-write\")\ndf.write.mode(\"overwrite\").parquet(f\"{OUT}/orders_from_csv\")",
+    "prompts": [
+      "Which lines start jobs? Include anything that runs before count().",
+      "With AQE off, how many stages does count() need, and why is there a shuffle at all?",
+      "How many tasks does each stage run over four small CSV files?",
+      "What changes in the count when AQE is on? Does the write change?"
+    ],
+    "flow": [
+      {
+        "label": "Read: 2 jobs",
+        "detail": "take(1) reads the header line (1 task); inferSchema scans all 4 file partitions (4 tasks)."
+      },
+      {
+        "label": "count(): 4 → 1",
+        "detail": "4 scan tasks write partial counts to a single-partition shuffle; 1 task adds them. One job with AQE off, two with AQE on."
+      },
+      {
+        "label": "Write: 1 job, 4 tasks",
+        "detail": "No shuffle: each of the 4 input partitions writes one Parquet part file."
+      }
+    ],
+    "reasoning": [
+      "spark.read is not free here. To name the columns, the CSV reader takes the first line with take(1), a one-task job. inferSchema then tokenizes the sampled input to choose types. At the default samplingRatio of 1.0 that is all of it: a second job with one task per file partition. Four small files become four partitions. The question 1 variant, inferSchema without header, measured the same two jobs. With a supplied schema, neither job ran.",
+      "count() is a global aggregate. Each scan task computes a partial count, an Exchange SinglePartition shuffles those four numbers, and one task adds them. With AQE off that is one job with two stages, 4 + 1 tasks. Two stages come from the aggregate’s shuffle, not from count() itself.",
+      "With AQE on, the shuffle stage is submitted as its own map-stage job (4 tasks). The result job then lists that stage as skipped and runs 1 task. The work is the same; the job count goes from 1 to 2.",
+      "The Parquet write has no shuffle, so it is one job with one stage of four tasks, and it wrote four part files. It rescans the CSV because nothing is cached. The schema, though, was fixed at read time and is not inferred again."
+    ],
+    "output": "count() printed 2000. printSchema() shows order_id, customer_id, and amt inferred as integer. The write produced four Parquet part files.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): spark.read.csv: 2 jobs (1 task; 4 tasks) = 2 stages run, 0 skipped, 5 tasks; count(): 2 jobs (4 tasks; 1 skipped stage then 1 task) = 2 stages run, 1 skipped, 5 tasks; write.parquet: 1 job (4 tasks) = 1 stage run, 0 skipped, 4 tasks. Total: 5 jobs, 5 stages run, 1 skipped, 14 tasks, 14 task attempts. AQE off: spark.read.csv: 2 jobs (1 task; 4 tasks) = 2 stages run, 0 skipped, 5 tasks; count(): 1 job (4 + 1 tasks) = 2 stages run, 0 skipped, 5 tasks; write.parquet: 1 job (4 tasks) = 1 stage run, 0 skipped, 4 tasks. Total: 4 jobs, 5 stages run, 0 skipped, 14 tasks, 14 task attempts. The write produced 4 part files. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "df.printSchema()  # inferred types: order_id, customer_id, and amt as integers\nfor group in [\"csv-read\", \"csv-count\", \"csv-write\"]:\n    print_work(group)",
+    "evidence": [
+      "csv-read should list two jobs: 1 task, then 4 tasks. Replace inferSchema with a schema string and the group has no jobs.",
+      "csv-count: with AQE off, one job with stages of 4 and 1 tasks. With AQE on, a 4-task job, then a job with one skipped stage and 1 task.",
+      "csv-write: one job, one stage, 4 tasks, the same under both settings. In the SQL tab, the count query shows its associated job IDs."
+    ],
+    "spoken": "Before count(), the reader already starts work. With header and inferSchema, Spark 3.5.7 runs a one-task job for the first line and a second job that scans all four input partitions to infer types. count() is a global aggregate: four scan tasks produce partial counts, a single-partition shuffle moves them, and one task adds them. With AQE off that is one job with two stages. With AQE on, the shuffle stage runs as its own job and the result job shows it as skipped. The Parquet write has no shuffle, so it is one stage of four tasks. On this input that was four jobs and 14 tasks with AQE off, five jobs with AQE on. Supplying a schema removes both read jobs.",
+    "followup": "What changes if you supply a schema instead of inferSchema?",
+    "followup_answer": "Both read-time jobs disappeared. With a schema string and header=True, spark.read started no job. Spark no longer needed the first line to name the columns or a pass to choose types. count() and the write kept the same jobs, stages, and tasks. On large inputs, that removes a full extra pass over the data. It also fixes the types instead of letting them depend on what the data happened to contain.",
+    "sources": [
+      "csv-docs",
+      "csv-infer",
+      "dataset",
+      "shuffle-exchange",
+      "dag-scheduler"
+    ]
+  },
+  {
+    "id": "count-parquet-filter-sql",
+    "title": "Parquet filter → SQL group-by",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet questions 2 and 10 merged: filter a Parquet DataFrame and show it, then register a view and show a SQL GROUP BY. Why can one show() start five jobs?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"parquet-read\")\ndf = spark.read.parquet(EVENTS_PARQUET)\n\nlabel(\"filter-show\")\ndf.filter(df.age > 30).show()\n\nlabel(\"sql-show\")\ndf.createOrReplaceTempView(\"events\")\nspark.sql(\"\"\"\n    SELECT user_id, COUNT(*) AS cnt\n    FROM events\n    WHERE event_type = 'click'\n    GROUP BY user_id\n\"\"\").show()",
+    "prompts": [
+      "Does reading Parquet start a job before any action?",
+      "How many partitions does the filtered show() need to scan?",
+      "Where is the shuffle in the SQL query, and how many shuffle partitions exist with AQE off?",
+      "Why might show() on the aggregate take several jobs with AQE off but only one result job with AQE on?"
+    ],
+    "flow": [
+      {
+        "label": "Read: 1 job, 1 task",
+        "detail": "Spark reads one Parquet footer in a small job to get the schema (no mergeSchema)."
+      },
+      {
+        "label": "filter show(): 1 task",
+        "detail": "show() asks for 21 rows; the first file partition already had them."
+      },
+      {
+        "label": "SQL show(): shuffle, then rounds",
+        "detail": "AQE off: 4 map tasks, then 1, 4, 20, 75, 8 of the 200 reduce partitions in five jobs. AQE on: 4 map tasks in one job, then 1 coalesced task."
+      }
+    ],
+    "reasoning": [
+      "Even without mergeSchema, the Parquet reader ran a one-task job to read a footer. createOrReplaceTempView started no job.",
+      "The filter is narrow and there is no exchange. show() calls take(21). The CollectLimit plan scans one partition first and scans more only if it is short of rows. The first file partition holds the largest file (event_id 1500–1999), with 250+ rows with age > 30, so one job with one task was enough.",
+      "The GROUP BY plan is partial count → Exchange hashpartitioning(user_id, 200) → final count. With AQE off, the first job ran 4 map tasks and 1 reduce partition. Only 38 of the 200 partitions hold any of the 40 users, and that partition held 2 rows. The next rounds asked for 4, 20, 75, and 8 partitions. Each round was a job that listed the map stage as skipped: 5 jobs, 112 tasks.",
+      "Replaying Spark’s rule on the measured rows per partition (2, 3, 7, and 20 rows after 1, 5, 25, and 100 partitions) gives exactly 1, 4, 20, 75, 8. Each later round asks for ceil(1.5 × rows still needed × partitions scanned ÷ rows found), capped at 4× the partitions scanned so far.",
+      "With AQE on, the shuffle stage runs as a map-stage job. AQE then coalesces the tiny output (160 records, 3.8 KiB) into one partition (AQEShuffleRead), and one result job finishes with 1 task."
+    ],
+    "output": "The filtered show() printed 20 rows starting at event_id 1513 (age 31) through 1532. The SQL show() printed 20 of the 40 users with cnt 16 or 17 each (667 clicks in total); row order is not guaranteed.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): spark.read.parquet: 1 job (1 task) = 1 stage run, 0 skipped, 1 task; filter show(): 1 job (1 task) = 1 stage run, 0 skipped, 1 task; SQL GROUP BY show(): 2 jobs (4 tasks; 1 skipped stage then 1 task) = 2 stages run, 1 skipped, 5 tasks. Total: 4 jobs, 4 stages run, 1 skipped, 7 tasks, 7 task attempts. AQE off: spark.read.parquet: 1 job (1 task) = 1 stage run, 0 skipped, 1 task; filter show(): 1 job (1 task) = 1 stage run, 0 skipped, 1 task; SQL GROUP BY show(): 5 jobs (4 + 1 tasks; 1 skipped stage then 4 tasks; 1 skipped stage then 20 tasks; 1 skipped stage then 75 tasks; 1 skipped stage then 8 tasks) = 6 stages run, 4 skipped, 112 tasks. Total: 7 jobs, 8 stages run, 4 skipped, 114 tasks, 114 task attempts. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "spark.sql(\"\"\"\n    SELECT user_id, COUNT(*) AS cnt\n    FROM events\n    WHERE event_type = 'click'\n    GROUP BY user_id\n\"\"\").explain()\nfor group in [\"parquet-read\", \"filter-show\", \"sql-show\"]:\n    print_work(group)",
+    "evidence": [
+      "parquet-read: one job, one task. filter-show: one job, one task.",
+      "sql-show with AQE off: five jobs. The first has stages of 4 and 1 tasks; each later job has one skipped 4-task stage and runs 4, 20, 75, and 8 tasks.",
+      "sql-show with AQE on: two jobs, 4 tasks then 1 task after a skipped stage. The SQL tab’s final plan shows AQEShuffleRead over the ShuffleQueryStage."
+    ],
+    "spoken": "Reading Parquet without mergeSchema ran one small footer job. The filtered show() has no shuffle. show() asks for 21 rows, Spark scans one partition first, and that partition had enough, so one job with one task. The SQL aggregation adds a hash shuffle on user_id. With AQE off there are 200 shuffle partitions but only 40 users, so show() scanned them in rounds of 1, 4, 20, 75, and 8 partitions. That was five jobs, and the last four each listed the four-task map stage as skipped. With AQE on, the map stage ran as its own job, AQE coalesced the tiny output to one partition, and one more job finished it. The number of show() jobs depends on where rows land, so I would measure it.",
+    "followup": "Would collect() or show(5) change the number of jobs for the aggregation?",
+    "followup_answer": "Yes, both changed it with AQE off. collect() does not scan in rounds: it ran one job with the 4 map tasks and all 200 reduce tasks. show(5) needs only six rows, so it stopped after rounds of 1, 3, and 12 partitions. That was three jobs and 20 tasks, instead of five jobs and 112. I measured these two variants with AQE off only. The number of show() jobs depends on n and on how the rows land in partitions.",
+    "sources": [
+      "parquet-docs",
+      "schema-merge",
+      "execute-take",
+      "collect-limit",
+      "coalesce-shuffle",
+      "limit-conf"
+    ]
+  },
+  {
+    "id": "count-repartition-groupby",
+    "title": "Repartition by key → groupBy → show",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 3: repartition(10, \"customer_id\") and then groupBy(\"customer_id\").count().show(). Does the groupBy shuffle again?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"repartition-read\")\ndf = spark.read.option(\"header\", \"true\").csv(ORDERS_CSV)\n\nlabel(\"repartition-show\")\ncounts = df.repartition(10, \"customer_id\").groupBy(\"customer_id\").count()\ncounts.show()",
+    "prompts": [
+      "How many Exchange operators do you expect in the plan?",
+      "Does AQE coalesce a repartition with an explicit partition count?",
+      "How many tasks run before and after the shuffle?",
+      "Why can show() still take more than one job?"
+    ],
+    "flow": [
+      {
+        "label": "Read: 1 job, 1 task",
+        "detail": "header only: take(1) for the first line; no inferSchema pass."
+      },
+      {
+        "label": "One shuffle: 4 map tasks",
+        "detail": "Exchange hashpartitioning(customer_id, 10), origin REPARTITION_BY_NUM."
+      },
+      {
+        "label": "Aggregate in place: 1, 4, 2 tasks",
+        "detail": "The partial and final count both run after the exchange; show() scanned 7 of 10 partitions in three rounds."
+      }
+    ],
+    "reasoning": [
+      "repartition(10, customer_id) produces hash partitioning on customer_id with 10 partitions. The aggregate needs rows with equal keys in the same partition, and that partitioning already provides it, so no second Exchange is added. The plan shows both HashAggregate operators above a single Exchange. There is no partial aggregation before the shuffle here, so all 2,000 rows are shuffled.",
+      "This exchange came from repartition with a number, so its origin is REPARTITION_BY_NUM. AQE’s coalescing rule skips that origin, and there was no AQEShuffleRead. The 10 partitions stayed 10 under both settings.",
+      "show() needs 21 rows from 50 keys spread over 10 partitions, about 5 per partition. The first partition held 3 rows, so the next round asked for 4 more partitions (17 rows after 5), then 2 more (28 rows after 7). With AQE off: three jobs, 4 + 1, then 4, then 2 tasks, with a skipped map stage in the last two. With AQE on, the map stage came first as its own job: four jobs with the same 11 tasks."
+    ],
+    "output": "show() printed 20 of the 50 customer_id values, each with count 40 (customer_id is a string because inferSchema is off). Row order is not guaranteed.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): spark.read.csv: 1 job (1 task) = 1 stage run, 0 skipped, 1 task; repartition/groupBy show(): 4 jobs (4 tasks; 1 skipped stage then 1 task; 1 skipped stage then 4 tasks; 1 skipped stage then 2 tasks) = 4 stages run, 3 skipped, 11 tasks. Total: 5 jobs, 5 stages run, 3 skipped, 12 tasks, 12 task attempts. AQE off: spark.read.csv: 1 job (1 task) = 1 stage run, 0 skipped, 1 task; repartition/groupBy show(): 3 jobs (4 + 1 tasks; 1 skipped stage then 4 tasks; 1 skipped stage then 2 tasks) = 4 stages run, 2 skipped, 11 tasks. Total: 4 jobs, 5 stages run, 2 skipped, 12 tasks, 12 task attempts. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "counts.explain()  # one Exchange: hashpartitioning(customer_id, 10)\nfor group in [\"repartition-read\", \"repartition-show\"]:\n    print_work(group)",
+    "evidence": [
+      "explain() shows one Exchange hashpartitioning(customer_id, 10), REPARTITION_BY_NUM, with both aggregates above it.",
+      "repartition-show with AQE off: three jobs running 4 + 1, 4, and 2 tasks; the second and third each list one skipped stage.",
+      "With AQE on: a 4-task map-stage job, then result jobs of 1, 4, and 2 tasks, each with one skipped stage. The final plan has no AQEShuffleRead."
+    ],
+    "spoken": "There is one shuffle, not two. repartition(10, customer_id) hash-partitions by the grouping key, which already satisfies the aggregate’s requirement, so the plan has one Exchange and both aggregates run after it. The read has header but no inferSchema, so it is a single one-task job. The shuffle has four map tasks, one per file, and ten reduce partitions. AQE does not coalesce a repartition with an explicit number. show() needs 21 rows at about five per partition, so it scanned 1, then 4, then 2 partitions. With AQE off that is three jobs and 11 tasks. With AQE on, the map stage ran as its own job, so four jobs with the same tasks.",
+    "followup": "What if you repartition by order_id instead, or skip repartition altogether?",
+    "followup_answer": "Repartitioning by order_id does not satisfy grouping by customer_id, so the plan had two exchanges: 10 partitions by order_id, then 200 by customer_id for the aggregate. With AQE off, the first show() job ran three stages of 4, 10, and 1 tasks. Later rounds scanned 4, 20, and 61 more partitions, each job skipping both earlier stages: four jobs, 100 tasks. With no repartition, one 200-partition shuffle followed a partial count: four jobs, 90 tasks. Repartitioning on the wrong key only adds a shuffle.",
+    "sources": [
+      "ensure-requirements",
+      "coalesce-shuffle",
+      "execute-take",
+      "csv-infer",
+      "shuffle-exchange"
+    ]
+  },
+  {
+    "id": "count-join-show",
+    "title": "Join two Parquet tables: broadcast vs shuffle",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 4: orders.join(customers, \"customer_id\").show(). A 1.7 KB customers table is broadcast automatically. What changes when you force a shuffle join?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"join-read\")\norders = spark.read.parquet(ORDERS_PARQUET)\ncustomers = spark.read.parquet(CUSTOMERS_PARQUET)\n\nlabel(\"join-broadcast\")  # customers is far below the 10 MB threshold\norders.join(customers, \"customer_id\").show()\n\nlabel(\"join-shuffle\")  # disable automatic broadcast to force a shuffle join\nspark.conf.set(\"spark.sql.autoBroadcastJoinThreshold\", \"-1\")\norders.join(customers, \"customer_id\").show()",
+    "prompts": [
+      "Which side can Spark broadcast, and does broadcasting need its own job?",
+      "How many stages does a sort-merge join need with AQE off?",
+      "Why does the shuffle join’s show() finish in a single reduce task here?",
+      "How does AQE change the number of jobs for the shuffle join?"
+    ],
+    "flow": [
+      {
+        "label": "Reads: 2 jobs",
+        "detail": "One footer job per Parquet table, 1 task each."
+      },
+      {
+        "label": "Broadcast: 2 jobs",
+        "detail": "Collect customers (1 task) for BroadcastExchange; then show() probes one orders partition (1 task)."
+      },
+      {
+        "label": "Shuffle join: 4 + 1 + 1",
+        "detail": "Hash-shuffle orders (4) and customers (1), then SortMergeJoin on 1 of 200 reduce partitions. One job with AQE off; three with AQE on."
+      }
+    ],
+    "reasoning": [
+      "Each spark.read.parquet ran a one-task footer job, two jobs before any action.",
+      "The customers files are far below the 10 MB autoBroadcastJoinThreshold, so the plan chose BroadcastHashJoin BuildRight. The build side is collected to the driver and broadcast in a separate job (it appears as $anonfun$withThreadLocalCaptured$1), 1 task for one file. show() then ran 1 task on the first orders partition, which had enough matching rows. Two jobs, no shuffle, under both settings.",
+      "With the threshold at -1 the plan became SortMergeJoin with two hash exchanges on customer_id (200 partitions). With AQE off, show()’s first job ran three stages: 4 orders map tasks, 1 customers map task, and 1 reduce task. Reduce partition 0 held customer 26’s 80 joined rows, enough for 21, so no second round ran.",
+      "With AQE on, each shuffle stage became its own job (4 tasks, then 1). AQE coalesced the reduce side to one partition, so the result job listed two skipped stages and ran 1 task. The same six tasks ran either way, as three jobs instead of one."
+    ],
+    "output": "Both show() calls printed 20 joined rows (customer_id, order_id, amt, name, age). Broadcast: customer_id 0–19 with order_id 1500–1519. Shuffle join with AQE off: 20 rows for customer 26. With AQE on: 20 rows for customer 0. Row order is not guaranteed.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): two Parquet reads: 2 jobs (1 task; 1 task) = 2 stages run, 0 skipped, 2 tasks; broadcast join show(): 2 jobs (1 task; 1 task) = 2 stages run, 0 skipped, 2 tasks; shuffle join show(): 3 jobs (4 tasks; 1 task; 2 skipped stages then 1 task) = 3 stages run, 2 skipped, 6 tasks. Total: 7 jobs, 7 stages run, 2 skipped, 10 tasks, 10 task attempts. AQE off: two Parquet reads: 2 jobs (1 task; 1 task) = 2 stages run, 0 skipped, 2 tasks; broadcast join show(): 2 jobs (1 task; 1 task) = 2 stages run, 0 skipped, 2 tasks; shuffle join show(): 1 job (4 + 1 + 1 tasks) = 3 stages run, 0 skipped, 6 tasks. Total: 5 jobs, 7 stages run, 0 skipped, 10 tasks, 10 task attempts. The broadcast join was chosen automatically because customers_parquet (1,695 bytes on disk) is below the 10 MB spark.sql.autoBroadcastJoinThreshold; the shuffle join sets that threshold to -1. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "orders.join(customers, \"customer_id\").explain()  # threshold is still -1 here\nfor group in [\"join-read\", \"join-broadcast\", \"join-shuffle\"]:\n    print_work(group)",
+    "evidence": [
+      "explain() after setting the threshold to -1 shows SortMergeJoin with two Exchange hashpartitioning(customer_id, 200). Before that, the SQL tab shows BroadcastHashJoin with BroadcastExchange.",
+      "join-broadcast: two 1-task jobs under both settings, the first being the broadcast collection.",
+      "join-shuffle with AQE off: one job with stages of 4, 1, and 1 tasks. With AQE on: jobs of 4 and 1 tasks, then a job with two skipped stages and 1 task."
+    ],
+    "spoken": "Two reads come first: each Parquet table ran a one-task footer job. customers is tiny, so the default plan broadcasts it. The broadcast collection is its own one-task job, and show() then probes a single orders partition, so there is no shuffle. If I disable broadcast, the plan becomes a sort-merge join with two hash shuffles. With AQE off, one job has three stages: four map tasks for orders, one for customers, and one reduce task, because the first reduce partition already had 21 joined rows. With AQE on, each shuffle stage runs as its own job and the result job lists both as skipped. Same tasks, three jobs. Broadcasting avoids the shuffles, but it still adds a job.",
+    "followup": "With broadcast disabled at planning time, can AQE still switch this to a broadcast join?",
+    "followup_answer": "Yes, if AQE is on and spark.sql.adaptive.autoBroadcastJoinThreshold allows it. With the planning threshold at -1 and the adaptive threshold at 10MB, both shuffle stages ran first, 4 tasks and 1 task. AQE then saw their real sizes and replaced the sort-merge join with a broadcast hash join built from shuffled output. That added a 1-task broadcast job and a 1-task result job: four jobs and seven tasks. In this run it broadcast the orders side. The conversion skips the sort and merge, not the shuffle writes that already happened.",
+    "sources": [
+      "broadcast-exchange",
+      "aqe",
+      "shuffle-exchange",
+      "execute-take",
+      "schema-merge"
+    ]
+  },
+  {
+    "id": "count-cache-reuse",
+    "title": "Cache → count → filtered count",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 5: cache a DataFrame, count it, then count a filter over it. Does the second count read the files again, and what does AQE add?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"cache-read\")\ndf = spark.read.parquet(ORDERS_PARQUET)\ndf.cache()\n\nlabel(\"cache-count\")\nprint(df.count())\n\nlabel(\"cache-filter-count\")\nprint(df.filter(df.amt > 1000).count())",
+    "prompts": [
+      "Does df.cache() start a job?",
+      "Which count fills the cache, and how can you tell the second one used it?",
+      "How many stages does each count need with AQE off?",
+      "Why could AQE add a job to the first count?"
+    ],
+    "flow": [
+      {
+        "label": "Read + cache(): 1 job",
+        "detail": "The Parquet footer job (1 task); cache() only marks the plan."
+      },
+      {
+        "label": "First count: fills cache",
+        "detail": "AQE off: 4 tasks scan Parquet and store cached partitions, then 1 task. AQE on: cache job (4), map job (4), result (1)."
+      },
+      {
+        "label": "Filtered count: from cache",
+        "detail": "4 tasks read cached partitions, then 1 task. AQE on splits it into two jobs."
+      }
+    ],
+    "reasoning": [
+      "cache() started no job. It marks the plan for caching, and the first action fills the cache. The only job before the first count was the Parquet footer read.",
+      "With AQE off, the first count is one job with two stages. Its 4 scan tasks read 28,325 bytes (2,000 records) of Parquet, build the cached partitions, and compute partial counts, and 1 task adds them. The filtered count is also 4 + 1 tasks. Its plan uses InMemoryTableScan, and its scan stage read 8,496 bytes, 4 input records, from the cached blocks instead of the files.",
+      "With AQE on, Spark 3.5.7 treats the not-yet-built cache as a query stage (TableCacheQueryStage). It builds the cache first with its own job over every cached partition: a separate 4-task job that read the Parquet files and wrote no shuffle. Next came the shuffle map stage (4 tasks, reading the cache) and a result job with a skipped stage (1 task): three jobs for the first count, two for the filtered count.",
+      "The cache avoided rereading the files, but the tasks did not go away. Every count still scans every cached partition."
+    ],
+    "output": "The first count printed 2000 and the filtered count printed 999: amt is (order_id × 37) mod 2000, a permutation of 0–1999, so 999 values exceed 1000. The storage level printed as Disk Memory Deserialized 1x Replicated.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): spark.read.parquet + cache(): 1 job (1 task) = 1 stage run, 0 skipped, 1 task; first count(): 3 jobs (4 tasks; 4 tasks; 1 skipped stage then 1 task) = 3 stages run, 1 skipped, 9 tasks; filtered count(): 2 jobs (4 tasks; 1 skipped stage then 1 task) = 2 stages run, 1 skipped, 5 tasks. Total: 6 jobs, 6 stages run, 2 skipped, 15 tasks, 15 task attempts. AQE off: spark.read.parquet + cache(): 1 job (1 task) = 1 stage run, 0 skipped, 1 task; first count(): 1 job (4 + 1 tasks) = 2 stages run, 0 skipped, 5 tasks; filtered count(): 1 job (4 + 1 tasks) = 2 stages run, 0 skipped, 5 tasks. Total: 3 jobs, 5 stages run, 0 skipped, 11 tasks, 11 task attempts. cache() itself started no job. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "df.filter(df.amt > 1000).explain()  # InMemoryTableScan instead of a file scan\nprint(df.storageLevel)\nfor group in [\"cache-read\", \"cache-count\", \"cache-filter-count\"]:\n    print_work(group)\ndf.unpersist()",
+    "evidence": [
+      "explain() on the filter shows InMemoryTableScan over InMemoryRelation, not a Parquet FileScan.",
+      "In the stages list, the cache-building scan stage reports about 28 KB of input and 2,000 records. The filtered count’s scan stage reports 8,496 bytes and 4 records.",
+      "cache-count with AQE on: 3 jobs (4, 4, skipped + 1). With AQE off: 1 job (4 + 1). The Storage tab lists the cached relation after the first count."
+    ],
+    "spoken": "cache() does not start anything by itself, so the only job before the first count is the Parquet footer read. With AQE off, the first count is one job with two stages. Four tasks scan the files, fill the cache, and compute partial counts, and one task adds them. The filtered count is again four plus one tasks, but its plan reads InMemoryTableScan and its input metrics are cached blocks, not Parquet bytes. With AQE on, Spark 3.5.7 builds the cache as its own query stage first, so the first count ran three jobs: build the cache, the shuffle map stage, then the result. The filtered count ran two. Caching saves rereading the files, not tasks.",
+    "followup": "What happens to the second count if you remove cache()?",
+    "followup_answer": "With AQE off, the jobs, stages, and tasks stayed the same: each count was one job with 4 + 1 tasks. What changed was the input. Without cache, the filtered count's scan stage read the Parquet files again, 2,000 records and 25,324 bytes, instead of cached blocks. With AQE on, the separate cache-building job has no reason to exist, and an uncached count follows the two-job shape measured in exercise 1. A cache changes where data is read from, and sometimes the job count, not the tasks per stage.",
+    "sources": [
+      "cache-api",
+      "query-stage",
+      "shuffle-exchange",
+      "web-ui",
+      "dag-scheduler"
+    ]
+  },
+  {
+    "id": "count-rdd-groupbykey",
+    "title": "RDD groupByKey on three partitions",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 6: five pairs in three partitions, groupByKey, mapValues(list), collect. How many reduce tasks, and where does that number come from?",
+    "code": "spark = fresh_session(aqe=True)  # AQE applies to SQL plans, not RDDs\nsc = spark.sparkContext\n\nlabel(\"rdd-groupbykey\")\npairs = sc.parallelize([(\"a\", 1), (\"b\", 2), (\"a\", 3), (\"b\", 4), (\"c\", 5)], 3)\nresult = pairs.groupByKey().mapValues(list).collect()\nprint(result)",
+    "prompts": [
+      "Which operation creates a shuffle dependency?",
+      "How many partitions does groupByKey produce when you pass no number?",
+      "Does AQE change anything for an RDD job?",
+      "How many jobs, stages, and tasks run?"
+    ],
+    "flow": [
+      {
+        "label": "3 map tasks",
+        "detail": "parallelize’s 3 partitions are hash-partitioned by key into shuffle files."
+      },
+      {
+        "label": "Shuffle: 3 partitions",
+        "detail": "No spark.default.parallelism set, so PySpark keeps the parent’s 3 partitions."
+      },
+      {
+        "label": "3 reduce tasks",
+        "detail": "Group values per key, mapValues(list) in the same stage, return rows to the driver."
+      }
+    ],
+    "reasoning": [
+      "collect() is the only action, so there is one job. groupByKey introduces a shuffle, so the job has two stages. mapValues is narrow and runs in the reduce stage.",
+      "PySpark’s groupByKey defaults its partition count from _defaultReducePartitions(). That uses spark.default.parallelism only if the key is set in the configuration; otherwise it keeps the RDD’s own partition count. Here that is 3, even though sc.defaultParallelism is 4 under local[4]. getNumPartitions() on the grouped RDD returned 3.",
+      "AQE optimizes SQL/DataFrame plans only, so this job was identical with it on or off: 3 map tasks and 3 reduce tasks."
+    ],
+    "output": "[('b', [2, 4]), ('a', [1, 3]), ('c', [5])] in both runs. Key order follows hash partitioning (PySpark fixes PYTHONHASHSEED for workers) and is not a contract. Do not rely on value order within a group either.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): collect(): 1 job (3 + 3 tasks) = 2 stages run, 0 skipped, 6 tasks. Total: 1 jobs, 2 stages run, 0 skipped, 6 tasks, 6 task attempts. AQE off: collect(): 1 job (3 + 3 tasks) = 2 stages run, 0 skipped, 6 tasks. Total: 1 jobs, 2 stages run, 0 skipped, 6 tasks, 6 task attempts. AQE does not apply to RDDs; the setting was changed only to confirm that. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "grouped = pairs.groupByKey().mapValues(list)\nprint(grouped.getNumPartitions())  # reduce-side partitions\nprint(grouped.toDebugString().decode())  # indentation marks the shuffle boundary\nprint_work(\"rdd-groupbykey\")",
+    "evidence": [
+      "getNumPartitions() prints 3; toDebugString() shows the ShuffledRDD from partitionBy with a (3) branch under it.",
+      "rdd-groupbykey: one job with two stages of 3 tasks each, the same with AQE on and off."
+    ],
+    "spoken": "One action, collect, so one job. groupByKey adds a shuffle, so there are two stages, and mapValues runs inside the second one. The first stage has three tasks, one per parallelize partition. In PySpark, groupByKey without a partition count uses spark.default.parallelism only if that key is set; otherwise it keeps the parent’s three partitions, so the reduce stage has three tasks. That makes six tasks. AQE does not apply to RDDs, and I measured the same counts with it on and off. The result groups a to [1, 3], b to [2, 4], and c to [5]. Key order depends on hashing, so I would not promise it.",
+    "followup": "How do you change the number of reduce tasks for this groupByKey?",
+    "followup_answer": "Pass the number: groupByKey(2) ran 3 map tasks and 2 reduce tasks in one job and produced the same three groups, in a different key order. Without an argument, PySpark uses spark.default.parallelism only when that key is explicitly set in the configuration. Otherwise it keeps the parent RDD's partition count, which is why this job had three reduce tasks. sc.defaultParallelism was 4, but that key was not set.",
+    "sources": [
+      "rdd-source",
+      "dag-scheduler",
+      "glossary",
+      "aqe"
+    ]
+  },
+  {
+    "id": "count-rdd-map-filter",
+    "title": "RDD map → filter → collect",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 7: parallelize(range(1, 11), 2).map(x * 2).filter(x > 10).collect(). No wide operations at all.",
+    "code": "spark = fresh_session(aqe=True)  # AQE applies to SQL plans, not RDDs\nsc = spark.sparkContext\n\nlabel(\"rdd-map-filter\")\nresult = sc.parallelize(range(1, 11), 2).map(lambda x: x * 2).filter(lambda x: x > 10).collect()\nprint(result)",
+    "prompts": [
+      "Are map and filter narrow or wide?",
+      "How many stages and tasks does collect() run?",
+      "Does a partition that returns no rows skip its task?"
+    ],
+    "flow": [
+      {
+        "label": "1 job",
+        "detail": "collect() is the only action."
+      },
+      {
+        "label": "1 stage",
+        "detail": "map and filter are narrow and pipeline together in each task."
+      },
+      {
+        "label": "2 tasks",
+        "detail": "Partition 1–5 returns nothing after the filter; partition 6–10 returns 12–20."
+      }
+    ],
+    "reasoning": [
+      "Both transformations are narrow, so there is no shuffle and the single job has a single stage.",
+      "The stage runs one task per partition: 2. The first partition, 1–5, doubles to 2–10 and keeps nothing, but its task still runs. An empty result does not remove work.",
+      "AQE does not apply to RDDs. Both settings measured 1 job, 1 stage, 2 tasks."
+    ],
+    "output": "[12, 14, 16, 18, 20]",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): collect(): 1 job (2 tasks) = 1 stage run, 0 skipped, 2 tasks. Total: 1 jobs, 1 stages run, 0 skipped, 2 tasks, 2 task attempts. AQE off: collect(): 1 job (2 tasks) = 1 stage run, 0 skipped, 2 tasks. Total: 1 jobs, 1 stages run, 0 skipped, 2 tasks, 2 task attempts. AQE does not apply to RDDs; the setting was changed only to confirm that. No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "print_work(\"rdd-map-filter\")",
+    "evidence": [
+      "rdd-map-filter: one job, one stage, two tasks, two attempts, under both settings."
+    ],
+    "spoken": "map and filter are narrow and run together in the same task, and collect is the only action, so this is one job with one stage. The stage runs one task per partition, two tasks. The first partition keeps nothing after the filter, but its task still runs. The result is 12, 14, 16, 18, and 20. AQE does not change RDD jobs, and I measured the same counts either way.",
+    "followup": "If you replace collect() with take(3), how many jobs run?",
+    "followup_answer": "Two jobs, one task each. take() scans one partition first. The partition holding 1 to 5 keeps nothing after the filter, so a second job scans the next partition and finds 12, 14, 16. The result is [12, 14, 16]. collect() ran both partitions in a single job. take() avoids a full scan, but it can take several small jobs to do it.",
+    "sources": [
+      "glossary",
+      "dag-scheduler",
+      "web-ui"
+    ]
+  },
+  {
+    "id": "count-json-agg-write",
+    "title": "JSON aggregate → show → write, no cache",
+    "label": "SUPPLIED PRACTICE",
+    "intro": "Sheet question 9: read JSON, groupBy(user_id).agg(avg duration), show it, then write the same aggregate to Parquet without caching. Is anything reused?",
+    "code": "spark = fresh_session(aqe=True)  # rerun with aqe=False to compare\n\nlabel(\"json-read\")\ndf = spark.read.json(SESSIONS_JSON)\n\nlabel(\"json-show\")\navg_duration = df.groupBy(\"user_id\").agg({\"duration\": \"avg\"})\navg_duration.show()\n\nlabel(\"json-write\")\navg_duration.write.mode(\"overwrite\").parquet(f\"{OUT}/avg_duration\")",
+    "prompts": [
+      "How many jobs does the JSON read start by itself?",
+      "How many jobs does show() take with AQE off, given 40 users and 200 shuffle partitions?",
+      "Does the write reuse the shuffle that show() produced?",
+      "How many write tasks and output files do you expect with AQE off, and with AQE on?"
+    ],
+    "flow": [
+      {
+        "label": "Read: 1 job, 4 tasks",
+        "detail": "Schema inference scans all four JSON files."
+      },
+      {
+        "label": "show(): rounds",
+        "detail": "AQE off: 4 + 1, then 4, 20, 75, 8 reduce tasks in five jobs. AQE on: 4 map tasks, then 1 coalesced task."
+      },
+      {
+        "label": "write: shuffle again",
+        "detail": "AQE off: 4 map + 200 write tasks in one job (38 files). AQE on: 4 map tasks, then 1 write task."
+      }
+    ],
+    "reasoning": [
+      "Without a schema, the JSON reader infers one by reading the records, one job with a task per file partition.",
+      "The aggregate is a partial avg, then Exchange hashpartitioning(user_id, 200), then the final avg. show() needs 21 rows. With AQE off, the 40 users land in 38 of 200 partitions, the same layout as exercise 2, so the rounds were identical: 1, 4, 20, 75, 8 reduce partitions over five jobs, the last four listing a skipped map stage.",
+      "The write is a separate action with its own physical plan and its own shuffle. Nothing is cached, so it rescanned the JSON files and reran the 4-task map stage. No stage was skipped from show(). With AQE off, the write stage ran all 200 partitions, 204 tasks in total, and wrote 38 part files because empty partitions write none. With AQE on, the map stage ran as its own job and the output was coalesced to one partition, so there was 1 write task.",
+      "Totals: AQE off, 7 jobs and 320 tasks. AQE on, 5 jobs and 14 tasks. Most of the AQE-off tasks are empty reduce partitions, which is why the 200 default matters for small data."
+    ],
+    "output": "show() printed 20 of the 40 users with avg(duration) between 273.0 and 326.0 (for example user 26 → 286.0); row order is not guaranteed. The write produced 38 Parquet part files with AQE off.",
+    "observed": "Observed with the Spark UI REST API on local PySpark 3.5.7 (local[4], JDK 17, macOS), a fresh application for each configuration, identical in two runs. AQE on (the default; spark.sql.shuffle.partitions 200): spark.read.json: 1 job (4 tasks) = 1 stage run, 0 skipped, 4 tasks; show(): 2 jobs (4 tasks; 1 skipped stage then 1 task) = 2 stages run, 1 skipped, 5 tasks; write.parquet: 2 jobs (4 tasks; 1 skipped stage then 1 task) = 2 stages run, 1 skipped, 5 tasks. Total: 5 jobs, 5 stages run, 2 skipped, 14 tasks, 14 task attempts. AQE off: spark.read.json: 1 job (4 tasks) = 1 stage run, 0 skipped, 4 tasks; show(): 5 jobs (4 + 1 tasks; 1 skipped stage then 4 tasks; 1 skipped stage then 20 tasks; 1 skipped stage then 75 tasks; 1 skipped stage then 8 tasks) = 6 stages run, 4 skipped, 112 tasks; write.parquet: 1 job (4 + 200 tasks) = 2 stages run, 0 skipped, 204 tasks. Total: 7 jobs, 9 stages run, 4 skipped, 320 tasks, 320 task attempts. With AQE off the write produced 38 part files (38 of 200 shuffle partitions hold data). No task was retried, so attempts equal tasks. Job and stage counts can differ on other Spark versions, configurations, file layouts, and data sizes.",
+    "verify_code": "avg_duration.explain()\nfor group in [\"json-read\", \"json-show\", \"json-write\"]:\n    print_work(group)",
+    "evidence": [
+      "json-read: one job with 4 tasks. With a supplied schema, the read starts no job.",
+      "json-show with AQE off: five jobs with 4 + 1, 4, 20, 75, and 8 tasks, the last four each with one skipped stage.",
+      "json-write: AQE off, one job with 4 + 200 tasks and no skipped stage. AQE on, a 4-task job, then a job with one skipped stage and 1 task. Count the part files in the output directory."
+    ],
+    "spoken": "The JSON read infers a schema, which is a four-task job before any action. The aggregation adds a hash shuffle on user_id. With AQE off there are 200 shuffle partitions but only 40 users, so show() scanned in rounds of 1, 4, 20, 75, and 8 partitions: five jobs, and the later ones list the map stage as skipped. The write is a separate action with its own plan. Without a cache it rescans the JSON and reruns the shuffle, then runs 200 write tasks and writes 38 files, since only 38 partitions hold data. With AQE on, each action runs a map-stage job and a result job on one coalesced partition. Nothing is reused between show and write.",
+    "followup": "If you cache the aggregate before show(), what does the write reuse?",
+    "followup_answer": "It depends on AQE, and the cache also fixed the partition count. With AQE off, show() ran the same five jobs as without the cache. The write then listed the 4-task map stage as skipped and ran 200 tasks. With AQE on, show() first built the whole cached aggregate: a map-stage job, then a 200-task job, then rounds of 1, 4, 20, 75, and 8, for seven jobs and 312 tasks. The write skipped the map stage but ran 200 tasks, not the single coalesced task seen without the cache. Measure before assuming a cache helps.",
+    "sources": [
+      "json-docs",
+      "json-infer",
+      "execute-take",
+      "shuffle-exchange",
+      "coalesce-shuffle"
+    ]
   }
 ]

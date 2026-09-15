@@ -149,7 +149,10 @@
   function renderSearch() {
     if (!searchIndex) return;
     const query = $('#site-search').value.trim().toLowerCase();
-    const matches = searchIndex.filter(item => `${item.title} ${item.text}`.toLowerCase().includes(query)).slice(0, 10);
+    // Title matches first, then body matches, each in index order.
+    const inTitle = item => item.title.toLowerCase().includes(query);
+    const matches = searchIndex.filter(item => `${item.title} ${item.text}`.toLowerCase().includes(query))
+      .sort((a, b) => inTitle(b) - inTitle(a)).slice(0, 10);
     $('#search-results').replaceChildren();
     if (!matches.length) $('#search-results').append(element('p', 'No matches. Try “shuffle”, “memory”, or “driver”.'));
     matches.forEach(item => {

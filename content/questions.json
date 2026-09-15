@@ -390,7 +390,7 @@
   },
   {
     "id": "web-python-udf-arrow",
-    "topic": "dataframes",
+    "topic": "pyspark-udfs",
     "type": "Concept",
     "origin": "practice",
     "question": "A Python UDF performs a string operation available as a built-in expression. Would enabling Arrow make the two equivalent?",
@@ -1349,12 +1349,12 @@
   },
   {
     "id": "senior-catalyst-phases",
-    "topic": "execution-flow",
+    "topic": "catalyst-aqe",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "Walk through what happens between writing a DataFrame and executing it.",
-    "answer": "The QueryExecution object exposes the phases: analyze the logical plan (resolve columns, tables, types), optimize it (rule-based rewrites, plus cost-based choices when statistics exist), create a physical plan (concrete strategies, planner picks one), then prepare the executed plan — inserting exchanges, satisfying partitioning and ordering, and collapsing eligible operators into whole-stage codegen. explain('extended') prints exactly these stages; the SQL tab shows the same artifacts with runtime metrics.",
+    "answer": "QueryExecution runs the phases in order. The parsed, unresolved logical plan is analyzed — columns, tables, and types resolved — as soon as the DataFrame is built. The optimizer applies rule batches such as null-filter inference, constant folding, and predicate pushdown. Physical planning applies strategies in a fixed order and, in Spark 3.5.7, takes the first plan they return; the join strategy comes from rules over size estimates, hints, and join type. Statistics make those estimates cost-based only when they are collected with ANALYZE TABLE and spark.sql.cbo.enabled is true, which it is not by default. Preparation rules then insert exchanges and sorts (EnsureRequirements) and collapse codegen stages. explain(\"extended\") prints the parsed, analyzed, optimized, and prepared physical plans; with AQE on, the physical plan is re-planned at run time.",
     "followup": "Where do table statistics enter, and what happens when they are missing?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
@@ -1367,12 +1367,13 @@
         "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: explain(\"extended\") printed the parsed, analyzed, optimized, and physical plans, and a filter size estimate changed only after column statistics were collected with spark.sql.cbo.enabled set to true."
   },
   {
     "id": "senior-whole-stage-codegen",
-    "topic": "execution-flow",
+    "topic": "catalyst-aqe",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
@@ -1395,13 +1396,13 @@
   },
   {
     "id": "senior-aqe",
-    "topic": "spark-ui",
+    "topic": "catalyst-aqe",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "What does adaptive query execution actually do at runtime?",
-    "answer": "It applies planning decisions after a shuffle map stage has produced real statistics: coalescing many small post-shuffle partitions into fewer, converting sort-merge joins to broadcast or shuffled hash joins when a side proves small, and splitting skewed sort-merge join partitions. It has been enabled by default since Spark 3.2 under spark.sql.adaptive.enabled. Because it reacts to completed stages, its effects appear between stages in the executed plan and in the SQL tab's updated plan.",
-    "followup": "Why can a physically planned broadcast not appear in the pre-execution explain?",
+    "answer": "After a shuffle map stage materializes, AQE re-optimizes and re-plans the rest of the query with its measured output sizes. By default it coalesces small post-shuffle partitions, converts a sort-merge join to a broadcast hash join when a side proves smaller than the adaptive broadcast threshold, and splits skewed join partitions. Converting to a shuffled hash join also needs spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold above its default of 0. AQE has been on by default since Spark 3.2.0. Before an action, explain shows AdaptiveSparkPlan isFinalPlan=false; afterwards, the same DataFrame or the SQL tab shows the final plan, with query stages and AQEShuffleRead coalesced, local, or skewed. A runtime switch comes after the shuffle writes, so it saves sorts and fetches, not the map-side shuffle.",
+    "followup": "Why can a broadcast join chosen by AQE not appear in an explain run before the action?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
       {
@@ -1409,17 +1410,18 @@
         "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a groupBy reduce stage coalesced from 200 tasks to 1, and a sort-merge join became a broadcast hash join only after both shuffle map stages had run."
   },
   {
     "id": "senior-aqe-limits",
-    "topic": "spark-ui",
+    "topic": "catalyst-aqe",
     "type": "Scenario",
     "origin": "practice",
     "collection": "senior-de",
     "question": "What problems does AQE not solve?",
-    "answer": "Anything not expressed as a post-shuffle planning decision: a slow scan on badly laid out files, a source-side hot partition before any exchange, an unpushable predicate or a Python UDF blocking optimization, an executor that cannot fit one task even after partition coalescing, and any problem whose evidence arrives after the stage it affects. AQE is a runtime planner, not a general fix — when the SQL tab shows the plan it chose, that plan is your new baseline to argue with.",
+    "answer": "Anything that is not a decision made after a completed stage. AQE cannot undo work already done: a runtime broadcast arrives after both sides' shuffles were written. It does not change scan parallelism, file layout, small files, or unpushable predicates, and a Python UDF stays opaque. A query without an exchange is not wrapped in an adaptive plan at all. Skew splitting covers joins and rebalance partitions, not a hot key in a groupBy or window. Coalescing only merges partitions — it never splits an oversized one — so a task that cannot fit its partition remains a problem. Driver-side collects are out of scope. Read the final plan as evidence of what AQE decided, then fix the remaining cause in layout, expressions, or configuration.",
     "followup": "Which single metric on the SQL tab would you read first for a slow scan?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
@@ -1432,18 +1434,19 @@
         "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a runtime switch to a broadcast hash join happened after both shuffle map stages were written, and a plain filtered scan was not wrapped in AdaptiveSparkPlan."
   },
   {
     "id": "senior-pushdown-blocks",
-    "topic": "lazy-evaluation",
+    "topic": "catalyst-aqe",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "What blocks predicate pushdown?",
-    "answer": "Anything the file reader cannot translate: Python UDFs are opaque functions to the reader, non-deterministic expressions cannot be pushed, and expressions outside the source's supported filter set stay in Spark. Partition pruning fails separately when the predicate wraps the partition column in a cast or function. The evidence is in the plan — look for which filters appear as pushed or partition filters on the scan; a missing entry tells you the predicate stayed in Spark.",
-    "followup": "Why does a cast on the partition column stop directory pruning?",
+    "answer": "Pushdown depends on expression shape. A filter reaches a Parquet reader only if Spark can translate it: a column compared with a literal, IN with literals, null checks, string prefix, suffix, or contains tests, and AND, OR, or NOT of those. A Python UDF becomes its own operator, so the scan gets PushedFilters: []. Wrapping a data column in a cast pushes only IsNotNull. Non-deterministic parts stay in Spark while deterministic conjuncts still push. An OR mixing a partition column with a data column is neither pruned nor pushed. Partition pruning works differently: Spark evaluates any deterministic partition-only predicate against listed values, so cast(day as string) = '2026-09-02' still read 2 of 6 files locally, while a Python UDF on day read all 6. Check PartitionFilters, PushedFilters, and files read.",
+    "followup": "Why does an OR between a partition column and a data column defeat both partition pruning and pushdown?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
       {
@@ -1455,18 +1458,19 @@
         "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: on a Parquet table partitioned by day, cast(day as string) still read 2 of 6 files, while a Python UDF on day or an OR mixing day with a data column read all 6; a Python UDF filter left PushedFilters empty."
   },
   {
     "id": "senior-python-udf-slow",
-    "topic": "dataframes",
+    "topic": "pyspark-udfs",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "Why are Python UDFs slow, precisely?",
-    "answer": "Two costs. Data crosses the JVM-to-Python boundary as serialized values, and an ordinary scalar UDF processes them record by record rather than as vectorized batches. And the function is a black box to Spark: Catalyst cannot look inside it, so it blocks predicate pushdown and whole-stage codegen for the surrounding pipeline. The performance fix is usually to express the logic as a built-in function, and only then consider the vectorized UDF interfaces.",
-    "followup": "Which two boundaries does an Arrow-based UDF still cross?",
+    "answer": "Three costs. The function runs in a separate Python worker process, so each row's input columns are pickled in the JVM, sent over a socket in batches, and unpickled into Python objects, and results travel back the same way. The function is called once per row, so Python call overhead grows with row count. And it is opaque to Catalyst: ExtractPythonUDFs moves it into a BatchEvalPython operator, which splits whole-stage codegen and prevents pushing any predicate that depends on its result. Predicates that do not touch the UDF can still move below it. On one laptop, a trivial upper-case UDF ran about eight times slower than the built-in; treat that as an illustration, not a rule. Prefer built-ins, then vectorized pandas UDFs.",
+    "followup": "Which of those costs does useArrow=True remove, and which remain?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
       {
@@ -1478,18 +1482,19 @@
         "url": "https://spark.apache.org/docs/3.5.7/sql-ref-functions.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a Python UDF planned as BatchEvalPython between two codegen stages, an unrelated id > 1 filter still ran below it, and one trivial UDF took 1.22 s against 0.15 s for the built-in on one laptop."
   },
   {
     "id": "senior-pandas-udf",
-    "topic": "dataframes",
+    "topic": "pyspark-udfs",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "What do pandas UDFs change about that boundary?",
-    "answer": "They transfer data in Arrow batches rather than one record at a time, so the Python side works on vectorized pandas Series (or a whole group for grouped variants) and the per-row overhead largely disappears. Types must be declared, and the boundary still exists, so Spark cannot optimize through the function. For genuinely Python-only logic, a pandas UDF is the right tool; for logic that exists as SQL, the built-in function is better.",
-    "followup": "When is a grouped map pandas UDF the wrong shape of tool entirely?",
+    "answer": "They change the transfer and the calling convention. Data crosses as Arrow record batches, up to spark.sql.execution.arrow.maxRecordsPerBatch rows (10,000 by default), and the function receives a pandas Series per batch — or a whole group for a Series-to-scalar aggregate — instead of being called per row. That removes per-row overhead only when the body is vectorized; Series.apply inside is still per-row Python. The boundary remains: the plan shows ArrowEvalPython, codegen still splits, and predicates on the result are not pushed. Return types must be declared, and for Series to Series the output length must match the input. A trivial local example ran faster than a plain Python UDF but slower than the built-in; the gain depends on the workload, not a fixed multiplier.",
+    "followup": "When is groupBy().applyInPandas the wrong shape of tool entirely?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
       {
@@ -1497,17 +1502,18 @@
         "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
       }
     ],
-    "reviewed": "2026-09-14",
-    "version": "Apache Spark 3.5.7"
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a Series-to-Series pandas UDF planned as ArrowEvalPython, received 10,000-row batches by default, and took 0.38 s against 1.22 s for a plain Python UDF and 0.15 s for the built-in in one local illustration."
   },
   {
     "id": "senior-udf-order",
-    "topic": "dataframes",
+    "topic": "pyspark-udfs",
     "type": "Concept",
     "origin": "practice",
     "collection": "senior-de",
     "question": "What is the right order of preference when you need custom logic?",
-    "answer": "First a built-in SQL function — it stays inside Catalyst and codegen. Then higher-order functions and the array/map/struct toolbox for collection logic. Then a pandas or Arrow UDF when the logic is genuinely Python. A plain row-at-a-time Python UDF is the last resort, chosen with the serialization and optimizer costs on the table. State the choice out loud in interviews; reaching for a UDF first is the tell.",
+    "answer": "First a built-in function or SQL expression: Catalyst can optimize it, push eligible filters, and generate code. Second, higher-order functions such as transform, filter, exists, and aggregate for array and map columns; they avoid Python entirely, though the observed plan evaluated transform outside whole-stage codegen. Third, a pandas UDF or pandas function API when the logic genuinely needs Python libraries, written with vectorized operations. Last, a row-at-a-time Python UDF. useArrow=True speeds its data transfer but still calls the function per row, so it is not equivalent to a pandas UDF; check its type coercion before enabling it. Whatever you choose, confirm in the plan — BatchEvalPython or ArrowEvalPython marks the Python boundary — and time a representative sample.",
     "followup": "Which built-in family would you reach for to transform elements inside an array column?",
     "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
     "references": [
@@ -1520,7 +1526,1676 @@
         "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
       }
     ],
-    "reviewed": "2026-09-14",
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the built-in planned inside one codegen stage, an Arrow Python UDF and a pandas UDF both planned as ArrowEvalPython, and a Project using transform was evaluated outside whole-stage codegen."
+  },
+  {
+    "id": "delta-acid-object-storage",
+    "topic": "delta-lake",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How does Delta Lake provide ACID transactions on object storage?",
+    "answer": "The table is whatever the transaction log says it is. Each commit is a JSON file in _delta_log named by the next version, listing add and remove actions for immutable Parquet files. Readers load the latest checkpoint plus later commits, so a query sees one complete version and never a half-written one. Writers use optimistic concurrency: read a snapshot, write new files that stay invisible, then create version N+1. If another writer got there first, the loser checks the new commits for conflicts and either retries or fails with an exception such as ConcurrentAppendException. The draft's 'atomically creating the next log file' needs a storage caveat: that atomicity comes from the storage system's mutual exclusion. HDFS and Azure provide it. The Delta 3.2.1 docs say S3 does not, so writes from multiple drivers can lose data unless every writer uses the DynamoDB-backed S3DynamoDBLogStore.",
+    "followup": "Why can a Delta reader safely ignore Parquet files left behind by a job that crashed mid-write?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 protocol: delta files, checkpoints, snapshot reconstruction, atomic commits",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/PROTOCOL.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: storage configuration, LogStore guarantees, S3 multi-cluster writes",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-storage.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: concurrency control and conflict exceptions",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/concurrency-control.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: a one-row DELETE committed one remove and one add action in 00000000000000000001.json, and a concurrent UPDATE and DELETE on one table produced one commit and one ConcurrentAppendException."
+  },
+  {
+    "id": "delta-merge-cost",
+    "topic": "delta-lake",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What does a Delta MERGE actually cost, and how do you bring that cost down?",
+    "answer": "In Delta 3.2.1 a MERGE with matched clauses first inner-joins source and target on the merge condition to find touched files, those with at least one match. It then reads those files again, joins them with the source, and writes updated rows, inserted rows, and every unmodified row from the touched files, before one commit swaps the files. 'Two passes' is right, but the cost driver is rewrite volume: one match in a large file rewrites the whole file. Locally, three matches spread across three 25-row files showed numTargetFilesRemoved 3 and numTargetRowsCopied 72. With deletion vectors enabled, the same MERGE removed 0 files, copied 0 rows, and added 3 deletion vectors. Reduce the cost with a partition predicate in the ON clause, clustering on the merge key so matches land in few files, compaction, and deletion vectors where every reader supports them.",
+    "followup": "Why does a MERGE fail when two source rows match the same target row, and how do you prepare the source?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 source: ClassicMergeExecutor (touched files, rewrite, deletion vectors)",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/spark/src/main/scala/org/apache/spark/sql/delta/commands/merge/ClassicMergeExecutor.scala"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: MERGE, performance tuning, and schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-update.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: deletion vectors",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-deletion-vectors.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: a MERGE updating 3 rows in a 100-row, four-file table removed 3 files and copied 72 rows by default, and removed 0 files, copied 0 rows, and added 3 deletion vectors with delta.enableDeletionVectors set to true."
+  },
+  {
+    "id": "delta-zorder-vs-partitioning",
+    "topic": "delta-lake",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Z-ordering or partitioning: when do you use each on a Delta table?",
+    "answer": "Partitioning splits the table into directories by value, so a filter on that column removes whole partitions from the file list. It fits low-cardinality columns that nearly every query, DELETE, and MERGE filters on, such as a date, and partition predicates also keep concurrent writers apart. On a high-cardinality column it creates masses of tiny files. Z-ordering (OPTIMIZE ZORDER BY) rewrites files so rows with nearby values share files, narrowing each file's min/max range so Delta's file statistics can skip on high-cardinality columns. Locally, a user_id range filter read 1 of 7 Z-ordered files versus 8 of 8 compacted but unordered files. Caveats: statistics cover only the first 32 columns by default, locality weakens with each extra column, and Z-order is not idempotent. A common layout combines both: partition by date, Z-order within partitions.",
+    "followup": "Why would Z-ordering on the 40th column of a wide table do nothing useful by default?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: OPTIMIZE compaction, Z-ordering, data skipping",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/optimizations-oss.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: table properties (data skipping columns, retention)",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/table-properties.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: with 2,000 rows in 40 tiny files and an 8 KiB OPTIMIZE target, a user_id range filter read 8 of 8 files after plain OPTIMIZE and 1 of 7 after OPTIMIZE ZORDER BY (user_id), and a 34-column table recorded statistics for only its first 32 columns."
+  },
+  {
+    "id": "delta-optimize-vacuum",
+    "topic": "delta-lake",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What do OPTIMIZE and VACUUM each do, and what does VACUUM cost you?",
+    "answer": "OPTIMIZE bin-packs small files into larger ones, 1 GiB by default, in a commit that removes the old files and adds the new ones. Readers on older snapshots are unaffected, and plain compaction is idempotent. OPTIMIZE deletes nothing from storage. VACUUM does: it deletes files that no version inside the retention window still needs. In practice, that means files the current version does not reference that became unreferenced more than the threshold ago, 7 days by default. That is more precise than 'unreferenced files past retention': a file dropped an hour ago stays. The cost is history, because time travel to a version whose files are gone fails. Locally, VACUUM RETAIN 0 HOURS was refused by the retention check. With the check disabled, reading version 0 raised SparkFileNotFoundException and RESTORE reported missing files. Log files expire separately, after 30 days by default.",
+    "followup": "Why can time travel to an old version fail even on a table where nobody has ever run VACUUM?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: OPTIMIZE compaction, Z-ordering, data skipping",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/optimizations-oss.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: VACUUM, DESCRIBE HISTORY metrics, RESTORE",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-utility.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: time travel, data retention, schema enforcement and mergeSchema",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: OPTIMIZE compacted 40 tiny files into 1 and a second run changed nothing, VACUUM RETAIN 0 HOURS failed the retention check, and with the check disabled collecting a vacuumed version raised SparkFileNotFoundException."
+  },
+  {
+    "id": "senior-parquet-orc-avro",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Parquet, ORC, or Avro: how do you choose for a Spark pipeline?",
+    "answer": "Parquet and ORC are both columnar, with statistics, compression, predicate pushdown, and vectorized readers in Spark 3.5.7. Pushdown is not what separates them; ecosystem usually is. Parquet is the common default for Spark lakehouses, and Delta Lake stores its data as Parquet. ORC is at home where Hive is. The draft's 'better ACID legacy in Hive' needs attribution: ACID is a Hive feature. The ORC project documents Hive transactional tables built from ORC base and delta files, but the ORC format by itself gives a Spark job no transactions. Avro is row-based and resolves reader and writer schemas, which suits record-at-a-time writes, Kafka payloads via from_avro and to_avro, and landing zones. The usual split: Avro at ingest, Parquet (or a table format over it) for analytics.",
+    "followup": "You land Kafka CDC events for analytics. Which format do you use at each layer, and why?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7: Parquet files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-parquet.html"
+      },
+      {
+        "title": "Spark 3.5.7: ORC files",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-orc.html"
+      },
+      {
+        "title": "Spark 3.5.7: Avro files, to_avro and from_avro",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-avro.html"
+      },
+      {
+        "title": "Apache ORC: ACID support in Hive",
+        "url": "https://orc.apache.org/docs/acid.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
     "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "senior-small-files",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Why is the small-file problem so damaging for Spark jobs, and how do you fix it?",
+    "answer": "Every file has a fixed cost regardless of size: an open, a footer read, object-store requests, and an entry in a listing or a table log. The draft's 'one task per file' is not what Spark 3.5.7 does. File scans pack files into partitions up to maxPartitionBytes, charging openCostInBytes (4 MB by default) per file, so 400 tiny local files became 13 scan partitions. The damage is overhead: in one local run, three filtered counts took 2.89 s over 400 files versus 0.46 s over the same rows in one file. 'No effective pushdown' is also too strong. The plan still showed PushedFilters; per-file cost simply outweighs what skipping saves. Fix it at write time by sizing output partitions to the data, then compact: OPTIMIZE for Delta, or a rewrite into fewer, larger files for plain Parquet.",
+    "followup": "Why does Spark add openCostInBytes to each file's size when it packs files into scan partitions?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 SQL tuning: maxPartitionBytes and openCostInBytes",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "Spark v3.5.7 source: FilePartition maxSplitBytes and file packing",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/datasources/FilePartition.scala"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: OPTIMIZE compaction, Z-ordering, data skipping",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/optimizations-oss.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: 400 tiny Parquet files were read as 13 scan partitions with default settings, and three filtered counts took 2.89 s against 0.46 s for the same rows in one file."
+  },
+  {
+    "id": "delta-conflict-types",
+    "topic": "delta-lake",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Two jobs write to the same Delta table at the same time. Which combinations can fail, and what do you do about it?",
+    "answer": "Delta uses optimistic concurrency, so what matters is whether the later commit read or removed files that the earlier commit changed. Per the Delta 3.2.1 docs, blind INSERTs cannot conflict with each other or with compaction. UPDATE, DELETE, and MERGE can conflict with every operation type, and compaction can conflict with those and with other compaction. Locally, three rounds of concurrent INSERTs all committed. An UPDATE racing a DELETE on one unpartitioned table failed with ConcurrentAppendException, because the winner added a rewritten file the loser's whole-table read should have seen. Other failures are ConcurrentDeleteReadException, ConcurrentDeleteDeleteException, MetadataChangedException, and ProtocolChangedException. Partition on the column the jobs filter by and put that predicate explicitly in each condition so their file sets are disjoint. Otherwise, serialize the writers or retry idempotent jobs.",
+    "followup": "Why can an INSERT ... SELECT that reads the same table conflict when a plain append cannot?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: concurrency control and conflict exceptions",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/concurrency-control.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: three rounds of concurrent blind INSERTs all committed, while a concurrent UPDATE and DELETE on one unpartitioned table produced one commit and one ConcurrentAppendException."
+  },
+  {
+    "id": "delta-time-travel-vacuum",
+    "topic": "delta-lake",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Reading a Delta table as of an old version fails with a missing-file error, yet count() on that version still works. What happened?",
+    "answer": "VACUUM removed that version's data files. Time travel needs both the log entries and the data files. VACUUM deletes files that fell out of the current version longer ago than the retention threshold, 7 days by default, while log files expire separately after delta.logRetentionDuration, 30 days by default. Locally, after VACUUM RETAIN 0 HOURS with the safety check disabled, version 0's log was intact. count() returned 10 from the statistics in the log, with a LocalTableScan plan and no Parquet read. collect() on the same version raised SparkFileNotFoundException, and RESTORE refused because not all of version 0's files were available. The retention check exists for this and to protect in-flight writers and long readers. If you need a longer recovery window, raise delta.deletedFileRetentionDuration and delta.logRetentionDuration together.",
+    "followup": "Which two table properties must both be raised to keep 90 days of time travel, and why is one not enough?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: time travel, data retention, schema enforcement and mergeSchema",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: VACUUM, DESCRIBE HISTORY metrics, RESTORE",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-utility.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: after VACUUM RETAIN 0 HOURS with the retention check disabled, count() on version 0 returned 10 from a LocalTableScan plan, while collect() raised SparkFileNotFoundException and RESTORE to version 0 failed."
+  },
+  {
+    "id": "delta-merge-schema-evolution",
+    "topic": "delta-lake",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "The source of a Delta MERGE gains a new column. What happens to the target with and without schema evolution?",
+    "answer": "Writes to Delta are schema-enforced: an append with an extra column fails with a schema-mismatch AnalysisException, and appends evolve only with mergeSchema. MERGE instead follows spark.databricks.delta.schema.autoMerge.enabled, false by default. Locally, with it off, whenMatchedUpdateAll and whenNotMatchedInsertAll succeeded but ignored the new tier column, leaving the target as id and name with no error. An explicit tier = s.tier assignment failed with DELTA_MERGE_UNRESOLVED_EXPRESSION. With autoMerge on, the same MERGE added tier, filled it for updated and inserted rows, and left it null in untouched rows. The trap is the silent drop with star clauses. If a new column matters, enable evolution deliberately for that job or add the column with ALTER TABLE first; do not rely on a session flag set somewhere else.",
+    "followup": "Why is turning on autoMerge as a default for every job risky?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: MERGE, performance tuning, and schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-update.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: time travel, data retention, schema enforcement and mergeSchema",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: with autoMerge off, a MERGE using updateAll and insertAll ignored an extra source column, and with autoMerge on the column was added and untouched rows read null."
+  },
+  {
+    "id": "delta-change-data-feed",
+    "topic": "delta-lake",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "What does Delta's change data feed give a downstream pipeline, and what does it cost?",
+    "answer": "With delta.enableChangeDataFeed set to true, Delta records row-level changes per commit. A batch or streaming read with readChangeFeed and a startingVersion returns the rows plus _change_type, _commit_version, and _commit_timestamp. The change types are insert, delete, update_preimage, and update_postimage. Locally, updating one row returned both its old and new values in version 1, and a delete returned a delete row in version 2. For UPDATE, DELETE, and MERGE, Delta writes extra change files under _change_data, and two appeared locally. For insert-only commits it can derive changes from the log's add actions instead. The costs are extra writes on DML, and the feed follows the table's retention, so VACUUM deletes change files too. A consumer that falls behind the retention window cannot replay.",
+    "followup": "Why does a streaming consumer of the change feed still need its own checkpoint?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: change data feed",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-change-data-feed.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: after an UPDATE and a DELETE on a CDF-enabled table, readChangeFeed from version 0 returned three inserts, an update_preimage and update_postimage pair at version 1, and a delete at version 2."
+  },
+  {
+    "id": "design-cdc-mongodb",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Design an ingestion pipeline for 500 GB/day of CDC events from MongoDB into a lakehouse. How do you handle ordering, schema drift, deletes, and replay?",
+    "answer": "I would split capture from apply. Reading MongoDB's change stream is a connector's job outside Spark; it should land each event with the document key, the operation, and a source-ordered position in Kafka or files. 500 GB/day averages under 6 MB per second, so micro-batches are comfortable, sized for peak rather than average. Bronze appends raw events unchanged and is retained long enough to replay. Silver applies each micro-batch in foreachBatch: keep the latest event per key by that position with row_number, then a Delta MERGE whose update fires only when the incoming position is higher, so late or replayed events cannot regress state. Deletes become tombstone rows rather than hard deletes, so a late update cannot resurrect a key; a current view filters them. Documents drift, so Bronze keeps the raw payload, Silver adds fields deliberately with an alert, and type conflicts go to quarantine. Replay reruns apply from Bronze and converges.",
+    "followup": "What would you use for ordering if the change events carried only a wall-clock timestamp?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: MERGE, CDC upserts, schema evolution in merge",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-update.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: idempotent table writes in foreachBatch",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-streaming.md"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: triggers, foreachBatch, fault tolerance",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: a sequence-guarded MERGE with tombstones kept the newest state through a late older batch and a replay, while arrival-order dedup with hard deletes regressed one key and resurrected a deleted one."
+  },
+  {
+    "id": "design-slow-nightly",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "A nightly job that ran in 40 minutes now takes 4 hours with no code change. How do you debug it?",
+    "answer": "No code change does not mean nothing changed, so I compare a good run with the slow one instead of tuning blind. First, input: did bytes, rows, or file counts grow, or did an upstream start writing thousands of small files? Second, in the Spark UI, find the stage whose duration grew most and compare its max task time and shuffle read with the median: one huge task points to a new hot key, uniformly slower tasks point to volume. Third, diff the SQL plans: a join that used to broadcast may now be sort-merge because a side grew past the threshold or statistics changed, and AQE may have chosen differently at runtime. Fourth, the environment: fewer or smaller executors, a changed Spark or library version, or a config drift. Fifth, spill and GC time, plus failed tasks and retried stages from lost executors or fetch failures. Then change only what the evidence points to and rerun.",
+    "followup": "Which numbers would you capture from both runs before changing anything?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Spark 3.5.7 SQL performance tuning: AQE and join strategies",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "design-freshness-5min",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Batch versus streaming for a 5-minute freshness requirement: what would you actually build, and why?",
+    "answer": "I would first pin down the requirement: source event to queryable row, at what percentile, and what a miss costs. Five minutes is well within Structured Streaming's micro-batch engine, which the Spark docs describe as reaching latencies as low as about 100 milliseconds, so experimental continuous processing, which is also at-least-once, is unnecessary. My default is a micro-batch query with a processing-time trigger around one minute, a checkpoint, and an idempotent Delta sink, which leaves headroom for a slow batch. A cron-scheduled batch every few minutes also works, but you then own incremental bookkeeping that the checkpoint provides, and startup time eats the budget. If always-on compute is too expensive, a scheduled Trigger.AvailableNow run reuses the same streaming code and checkpoint in batch-style runs, provided interval plus runtime stays under five minutes. Either way I would alert on end-to-end lag, not on job success.",
+    "followup": "Which metric would you alert on to prove the five-minute SLA is being met?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: triggers, foreachBatch, fault tolerance",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: idempotent table writes in foreachBatch",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-streaming.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "design-dq-loud",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How would you build data quality checks that fail loudly without blocking downstream consumers?",
+    "answer": "I separate row-level failures from batch-level ones. Row rules such as a null key or a negative amount split the batch: valid rows publish, failing rows go to a quarantine table with the rule name and batch ID, and the quarantine rate is a metric with an alert threshold. True invariants go into the table as NOT NULL and CHECK constraints; in Delta one violating row fails the entire write, which is loud but blocking, so I use them sparingly. Batch-level checks — row count against a trailing baseline, duplicate keys, freshness — use write-audit-publish: write to staging, run the audits, then publish in one commit. A failed audit pages someone while consumers keep reading the last good version instead of half-checked data. Finally, I alert on silent success: a job that writes zero rows, or far fewer than usual, should page as loudly as a crash.",
+    "followup": "When would you rather block the pipeline than quarantine the bad rows?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: NOT NULL and CHECK constraints",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-constraints.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: selective overwrite, dynamic partition overwrite, idempotent writes, time travel, schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: one row violating a CHECK constraint in a three-row append raised DeltaInvariantViolationException and none of the batch was committed."
+  },
+  {
+    "id": "design-multitenant-acl",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How would you design multi-tenant access control over a shared lakehouse?",
+    "answer": "I would start by separating what Spark enforces from what the platform enforces. Spark 3.5.7 provides authentication, encryption, and Web UI view and modify ACLs, none enabled by default, but no table-, row-, or column-level permissions on data. Those come from a catalog or governance layer such as Unity Catalog, Apache Ranger, or AWS Lake Formation, each with its own vendor- or project-specific model. The design: tenants as groups rather than users; grants at schema or table level by default; row filters or per-tenant views where tenants share a table; column masks for sensitive fields; and grants managed as reviewed code. Then close the bypass: a job that reads the object store directly is not stopped by a SQL grant, so storage credentials must be scoped to match. Finally, audit access logs and test that one tenant's queries return nothing belonging to another.",
+    "followup": "Where does partitioning or separate storage per tenant help, and why does it not replace grants?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 security: authentication, encryption, UI ACLs",
+        "url": "https://spark.apache.org/docs/3.5.7/security.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "design-backfill",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How do you backfill a partitioned table without double-counting?",
+    "answer": "Make the partition, not the run, the unit of truth: a backfill replaces a partition's contents instead of appending to it. For each date, recompute from the immutable source and overwrite just that date. On Delta, replaceWhere on the date predicate is atomic and fails if any row falls outside it. On plain Parquet or other file-source tables, set partitionOverwriteMode to dynamic, because the default static mode on an unscoped overwrite deletes partitions you did not touch. Run dates in bounded chunks so a failure retries one chunk, and keep the live job from writing the same partitions meanwhile. Two traps: an append guarded by a date-derived txnVersion silently skips older dates, and dynamic overwrite replaces a whole partition if one stray row lands there. Recompute downstream aggregates for the same range, and reconcile per-date counts before and after.",
+    "followup": "How would you backfill a table that is maintained by MERGE rather than by partition overwrite?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 configuration: spark.sql.sources.partitionOverwriteMode",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: selective overwrite, dynamic partition overwrite, idempotent writes, time travel, schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: a static overwrite of one day into a three-day Parquet table left one day, dynamic mode kept all three, replaceWhere rejected an out-of-range row, and a lower txnVersion was skipped without error."
+  },
+  {
+    "id": "design-corrupt-bronze",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Your Bronze layer received corrupt data for three days. What is your recovery plan?",
+    "answer": "Contain, scope, repair, prove, prevent. Contain: fix or pause the writer and stop downstream jobs from propagating more. Scope: use table history to find the first bad version and which partitions and downstream tables consumed it. Repair Bronze: if nothing good was written since, RESTORE to the last good version, which writes a new, auditable commit; if good data is interleaved, rewrite only the affected days from the raw landing copy with replaceWhere. RESTORE works only while old data files survive VACUUM, seven days by default, so check retention before promising it; after VACUUM, replay from immutable raw input is the only path, and if the source sent bad data, the source must resend. Then recompute Silver and Gold for the affected partitions idempotently, reconcile counts against the source, and add the check that would have caught it on day one.",
+    "followup": "What changes if consumers have already exported the bad numbers to an external system?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 docs: VACUUM, history, RESTORE",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-utility.md"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: selective overwrite, dynamic partition overwrite, idempotent writes, time travel, schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: RESTORE rolled back a bad overwrite as a new commit, and after a zero-hour VACUUM a RESTORE to the old version failed because its data files were gone."
+  },
+  {
+    "id": "story-skew-fix",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Tell me about a data skew problem you fixed, with before and after numbers.",
+    "answer": "Fill this in with a real incident of your own; this card gives only the structure an interviewer probes. Situation: the job, its schedule, input size, and cluster size. Task: the SLA miss as a number, such as stage runtime against target. Action: evidence first. From the Spark UI, the slow stage's max task duration and shuffle read against the median, then the hot key and its share of rows, and whether AQE skew-join handling applied; in Spark 3.5.7 it splits skewed partitions of sort-merge and shuffled hash joins and does not fix a skewed aggregation. Then the fix you chose, such as salting, isolating hot keys into a broadcast join, pre-aggregating, or filtering null keys, and what you rejected. Result: before and after stage time, total runtime, and cost, measured the same way on comparable input. Expect a follow-up on why adding executors would not have helped.",
+    "followup": "Why would adding executors not have fixed that stage?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Spark 3.5.7 SQL performance tuning: AQE and join strategies",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "story-cost-runtime",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Describe a time you reduced a pipeline's cost or runtime. What were the numbers?",
+    "answer": "Use a real incident of your own; this card gives the shape. Situation: the pipeline, how often it runs, data volume per run, and cluster. Task: the baseline in one unit you can defend, such as runtime per run, node-hours, monthly cost, or bytes scanned, and why it mattered. Action: where the time or money went before you changed anything, from the Spark UI and SQL plan: the dominant stage, scans reading far more than the query needed, shuffle volume, spill, idle executors, or small files. Then the one or two changes with the largest effect, such as pruning partitions, fixing file layout, removing an unneeded shuffle or cache, broadcasting a small side, or right-sizing the cluster, and the trade-off each carried. Result: before and after in the same unit on comparable input, the percentage, and whether it held over later runs. Interviewers probe attribution, so know how you proved the change caused the saving.",
+    "followup": "How did you rule out smaller input or a quieter cluster as the reason the job got faster?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Spark 3.5.7 SQL performance tuning: AQE and join strategies",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "story-correctness-bug",
+    "topic": "pipeline-design",
+    "type": "Design",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Tell me about a correctness bug you caught in a data pipeline.",
+    "answer": "Fill this in with an incident you actually handled; this card gives the structure. Situation: the table, its consumers, and what they used it for. Task: the discrepancy as numbers — rows or amounts off, by what percentage, over how many days — and how it surfaced: a reconciliation, a consumer, or an alert. Action: the root cause in one sentence and how you proved it, for example a non-idempotent append that double-counted on retry, updates applied in arrival order instead of source order, a join that fanned out on duplicate keys, or a timezone boundary. Then the repair of history, such as a restore, a replaceWhere backfill, or a replay from raw, and how you told consumers. Result: counts reconciled after the fix and the guard you added, such as a uniqueness check, a sequence-guarded merge, or a row-count audit. Expect probing on blast radius and on why the pipeline still reported success.",
+    "followup": "Which automated check would have caught it earliest, and what would it cost to run?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Web UI: jobs, stages, SQL metrics",
+        "url": "https://spark.apache.org/docs/3.5.7/web-ui.html"
+      },
+      {
+        "title": "Delta Lake 3.2.1 docs: selective overwrite, dynamic partition overwrite, idempotent writes, time travel, schema evolution",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-batch.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "gap-broadcast-variable-vs-join",
+    "topic": "architecture",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "How is a broadcast variable created with sc.broadcast different from a broadcast join?",
+    "answer": "sc.broadcast(value) is an object you create and manage. The driver serializes a read-only value once; executors fetch and cache a copy on first use; tasks read it through .value instead of receiving the object inside every serialized closure. Use it for lookup data consumed by RDD functions or Python UDFs. A broadcast join is a physical plan choice for DataFrames and SQL. Under spark.sql.autoBroadcastJoinThreshold, or with a BROADCAST hint, the planner collects the small side to the driver, builds a hashed relation, and ships it through a BroadcastExchange so the large side joins without a shuffle. pyspark.sql.functions.broadcast only marks a DataFrame for that plan; it returns a DataFrame, not a Broadcast object with .value. Both keep a copy in driver memory and on every executor, so neither suits large data.",
+    "followup": "If you want the join to stay a broadcast join after a refactor, how do you check that the plan still broadcasts?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: broadcast variables",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#broadcast-variables"
+      },
+      {
+        "title": "Spark SQL performance tuning: join strategy hints",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#join-strategy-hints-for-sql-queries"
+      },
+      {
+        "title": "PySpark API: pyspark.Broadcast",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.Broadcast.html"
+      },
+      {
+        "title": "Spark source: BroadcastExchangeExec",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/BroadcastExchangeExec.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: sc.broadcast returned a Broadcast whose .value served an RDD map, and with automatic broadcasting disabled (threshold -1) a functions.broadcast hint still produced BroadcastExchange and BroadcastHashJoin in the physical plan."
+  },
+  {
+    "id": "gap-broadcast-lifecycle",
+    "topic": "architecture",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "An RDD map function captures a large Python lookup dict. Should you broadcast it, and what do unpersist and destroy do afterwards?",
+    "answer": "Without a broadcast, the dict is pickled into the function itself. PySpark 3.5.7 moves a pickled command larger than the Python broadcast threshold (1 MiB by default) into an internal broadcast, so the job runs, but you cannot reuse or release that copy. An explicit lookup = sc.broadcast(d) serializes the dict once, lets later jobs reuse executor copies, and gives you control of its lifetime. lookup.unpersist() deletes the executor copies; if a later task reads it, Spark re-sends it. lookup.destroy() removes all data and metadata for the variable, and any later use fails. Both are non-blocking by default. The driver still holds the original dict and executors hold copies, so size the lookup against driver and executor memory, and prefer a broadcast join when the lookup is really a table you join with.",
+    "followup": "Why can a large closure in PySpark avoid the task-size warning that the same closure would trigger in Scala?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: broadcast variables",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#broadcast-variables"
+      },
+      {
+        "title": "Tuning guide: broadcasting large variables",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html#broadcasting-large-variables"
+      },
+      {
+        "title": "PySpark API: pyspark.Broadcast",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.Broadcast.html"
+      },
+      {
+        "title": "PySpark source: _prepare_for_python_RDD broadcast threshold",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/python/pyspark/rdd.py"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: a closure capturing a 2,000,000-element list pickled to 9,874,662 bytes against a 1,048,576-byte threshold and ran; a broadcast still worked after unpersist(), and after destroy() the next job failed with INTERNAL_ERROR_BROADCAST, Attempted to use Broadcast(0) after it was destroyed."
+  },
+  {
+    "id": "gap-pyspark-unit-test",
+    "topic": "dataframes",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "How would you unit-test a PySpark function that adds derived columns to a DataFrame?",
+    "answer": "Keep the transformation a pure function from DataFrame to DataFrame, so a test calls it without reading or writing storage. Start one local SparkSession for the whole test run, for example a session-scoped pytest fixture with master local[1], few shuffle partitions, and the UI disabled, and stop it at teardown; JVM startup is the slow part. Build tiny inputs with an explicit DDL schema that includes nulls and edge cases, call the function, and compare the result with pyspark.testing.assertDataFrameEqual (added in 3.5.0). It checks the schema when the expected value is a DataFrame. Use assertSchemaEqual when the schema itself is the contract. Leave storage, cluster, and performance behavior to integration tests. One environment caveat: in this runtime, PySpark 3.5.7 with NumPy 2.0.2, importing pyspark.testing failed on np.NaN inside pandas-on-Spark, so check the NumPy version in your test environment.",
+    "followup": "Why is sharing one session across tests faster, and what state can leak from one test into another?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark guide: testing PySpark",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/getting_started/testing_pyspark.html"
+      },
+      {
+        "title": "PySpark API: assertDataFrameEqual",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.testing.assertDataFrameEqual.html"
+      },
+      {
+        "title": "PySpark API: assertSchemaEqual",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.testing.assertSchemaEqual.html"
+      },
+      {
+        "title": "PySpark source: pandas-on-Spark strings module (np.NaN default)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/python/pyspark/pandas/strings.py"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: a fixture-shaped test comparing a derived total column against expected rows in a different order passed; with NumPy 2.0.2, from pyspark.testing import assertDataFrameEqual raised AttributeError: np.NaN was removed in the NumPy 2.0 release."
+  },
+  {
+    "id": "gap-assert-dataframe-equal",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "What does assertDataFrameEqual compare in PySpark 3.5.7, and when can it pass even though two DataFrames differ?",
+    "answer": "It collects both sides to the driver, so it is meant for small test data. When both arguments are DataFrames it first calls assertSchemaEqual, which compares field count, names, and order, ignores nullability, and compares data types by type name only. Then, with checkRowOrder=False by default, it sorts both row lists by their string form and compares row by row: order is ignored, but duplicate counts still matter. Floats pass within rtol=1e-5 and atol=1e-8. The gaps follow from that design: decimal(10,2) against decimal(38,0) with equal values passes, a map of string to int against a map of string to string passes the schema check, nullable against non-nullable passes, and a list of Rows as the expected value skips the schema check entirely. When precision or nullability is part of the contract, assert it separately.",
+    "followup": "How would you assert that an output column is non-nullable, given that assertSchemaEqual ignores nullability?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark API: assertDataFrameEqual",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.testing.assertDataFrameEqual.html"
+      },
+      {
+        "title": "PySpark API: assertSchemaEqual",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.testing.assertSchemaEqual.html"
+      },
+      {
+        "title": "PySpark source: pyspark.testing.utils",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/python/pyspark/testing/utils.py"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: reordered rows passed by default and failed with DIFFERENT_ROWS under checkRowOrder=True; int versus bigint and swapped column order failed with DIFFERENT_SCHEMA; nullable versus non-nullable, decimal(10,2) versus decimal(38,0), and map value type differences passed; differing duplicate counts failed."
+  },
+  {
+    "id": "gap-managed-external-table",
+    "topic": "storage-formats",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "How do saveAsTable, saveAsTable with a path option, and a plain save to a path differ, and what does DROP TABLE delete in each case?",
+    "answer": "A plain df.write.parquet(path) or save(path) only writes files. There is no catalog entry, so nothing can be dropped; you delete the directory yourself. df.write.saveAsTable(name) writes under spark.sql.warehouse.dir and registers a managed table: the catalog owns metadata and data, and DROP TABLE removes the table directory. df.write.option(\"path\", p).saveAsTable(name), or CREATE TABLE ... USING parquet LOCATION p, registers an external table: DROP TABLE removes only the metadata, the files stay, and you can register them again. DESCRIBE TABLE EXTENDED shows MANAGED or EXTERNAL in its Type row. The choice is about ownership. Managed fits data whose lifecycle the catalog should control; external fits data shared with other engines or that must survive an accidental drop.",
+    "followup": "After you recreate an external partitioned table over existing files, why might queries return no rows until you run MSCK REPAIR TABLE?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark SQL guide: saving to persistent tables",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-load-save-functions.html#saving-to-persistent-tables"
+      },
+      {
+        "title": "Spark SQL reference: DROP TABLE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-ddl-drop-table.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: DESCRIBE TABLE EXTENDED reported MANAGED and EXTERNAL; after DROP TABLE the managed directory no longer existed, the external path still held its 2 Parquet files, and CREATE TABLE ... LOCATION over that path read back all 5 rows."
+  },
+  {
+    "id": "gap-local-catalog-tables",
+    "topic": "storage-formats",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "In a local PySpark script, saveAsTable succeeds, but the next run cannot find the table, and a new saveAsTable of the same name fails with LOCATION_ALREADY_EXISTS. What is happening?",
+    "answer": "A session built with SparkSession.builder without enableHiveSupport() uses spark.sql.catalogImplementation=in-memory. Table metadata lives only in that application, but the managed table's files stay in the warehouse directory (spark-warehouse by default). The next run starts with an empty catalog, so the table is missing, and a managed table with the same name cannot be created because its default location is not empty. The guide's note that saveAsTable creates a local Derby metastore describes a Hive-enabled session. The pyspark shell tries Hive support by default when Hive classes are available, which is why the same code can behave differently there. Choose the catalog deliberately: Hive support with a stable metastore and warehouse, an external table you register on each run, or path-based reads and writes. Deleting the leftover directory is acceptable only for scratch data.",
+    "followup": "Where does a Hive-enabled local session keep its metastore and warehouse when no hive-site.xml is present?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark SQL guide: saving to persistent tables",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-load-save-functions.html#saving-to-persistent-tables"
+      },
+      {
+        "title": "Spark SQL guide: Hive tables",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-hive-tables.html"
+      },
+      {
+        "title": "PySpark source: SparkSession builder and shell session",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/python/pyspark/sql/session.py"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: a builder session reported catalogImplementation in-memory, a second application listed no tables while the managed table's 2 files remained, saveAsTable then raised LOCATION_ALREADY_EXISTS, and the pyspark shell reported hive."
+  },
+  {
+    "id": "gap-malformed-read-modes",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "How do PERMISSIVE, DROPMALFORMED, and FAILFAST differ when Spark reads malformed JSON or CSV, and how do you keep the bad records?",
+    "answer": "PERMISSIVE is the default: a malformed record still becomes a row, with the fields that failed to parse set to null. To keep the raw text, your schema must include a nullable string column whose name matches columnNameOfCorruptRecord (default _corrupt_record, from spark.sql.columnNameOfCorruptRecord). Without that column the bad row survives only as nulls; a non-string column raises an AnalysisException. When Spark infers a JSON schema from bad input, it adds the column itself. DROPMALFORMED drops corrupted records. FAILFAST raises MALFORMED_RECORD_IN_PARSING, but only when an action parses the data; building the DataFrame succeeds. Treat the corrupt-record column as an input to a quarantine table, not something to discard. badRecordsPath is a Databricks option, not part of Apache Spark 3.5.7's JSON or CSV sources.",
+    "followup": "Why was id still populated on a row whose amount value failed to parse?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark SQL guide: JSON data source options",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-json.html#data-source-option"
+      },
+      {
+        "title": "Spark SQL guide: CSV data source options",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-csv.html#data-source-option"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: PERMISSIVE with _corrupt_record kept the text {\"id\": 2, \"amount\": \"oops\"} with id 2 and amount null, the same read without the column returned only nulls for bad fields, an INT corrupt column raised 'The field for corrupt records must be string type and nullable', DROPMALFORMED kept 2 of 4 rows, and FAILFAST failed only at collect()."
+  },
+  {
+    "id": "gap-corrupt-record-queries",
+    "topic": "dataframes",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Filtering a raw JSON read on _corrupt_record raises an AnalysisException, and count() under DROPMALFORMED returns more rows than collect(). Why?",
+    "answer": "Both come from column pruning in the reader: Spark parses only the fields a query needs, so what counts as malformed depends on the query. Since Spark 2.3, a query on a raw JSON or CSV scan whose referenced columns are only the corrupt-record column is rejected, and 3.5.7 still raises that error. Cache or save the parsed DataFrame first, then filter it. Adding another column is not a real fix: selecting id with _corrupt_record ran, but returned only the syntactically broken line, because the bad amount value was never parsed. count() needs no columns, so fewer problems are detected: CSV DROPMALFORMED returned 2 rows from collect() but 5 from count(), and JSON returned 2 and 3. The CSV guide documents this pruning (spark.sql.csv.parser.columnPruning.enabled). Compute data-quality counts from a cached or persisted parse.",
+    "followup": "What would you store in a quarantine table so a malformed-record count is reproducible later?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark SQL migration guide: 2.2 to 2.3 corrupt-record queries",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-migration-guide.html#upgrading-from-spark-sql-22-to-23"
+      },
+      {
+        "title": "Spark SQL migration guide: 2.3 to 2.4 CSV column pruning",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-migration-guide.html#upgrading-from-spark-sql-23-to-24"
+      },
+      {
+        "title": "Spark SQL guide: CSV data source options",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-csv.html#data-source-option"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: filter and select on only _corrupt_record raised 'Since Spark 2.3, the queries from raw JSON/CSV files are disallowed', the cached DataFrame counted 2 corrupt rows, id plus _corrupt_record returned 1 row, and DROPMALFORMED counts were 2 versus 5 (CSV) and 2 versus 3 (JSON) for collect() versus count()."
+  },
+  {
+    "id": "gap-kryo-vs-java",
+    "topic": "executor-memory",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "When does switching spark.serializer from Java serialization to Kryo matter?",
+    "answer": "spark.serializer (default JavaSerializer) serializes JVM objects that are shuffled, sent over the network, or cached in serialized form. Kryo is faster and more compact, and works best with registered classes. The payoff is clearest for Scala or Java RDDs of custom objects and serialized RDD caches. DataFrame and SQL shuffles avoid that path: ShuffleExchangeExec uses UnsafeRowSerializer over Tungsten's binary rows, and encoders convert typed objects into that format. The setting still applies to DataFrames when Spark serializes whole blocks. A DataFrame persisted at a serialized level, such as MEMORY_ONLY in PySpark or DISK_ONLY, stores its cached batches through spark.serializer. PySpark RDD records are already pickled bytes when the JVM sees them, so Kryo changes little there. Switch serializers when profiling points to serialization cost, not by default.",
+    "followup": "Why could spark.kryo.registrationRequired=true break a DataFrame persist(StorageLevel.MEMORY_ONLY) while DataFrame joins still worked?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Tuning guide: data serialization",
+        "url": "https://spark.apache.org/docs/3.5.7/tuning.html#data-serialization"
+      },
+      {
+        "title": "Configuration: compression and serialization",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html#compression-and-serialization"
+      },
+      {
+        "title": "Spark source: ShuffleExchangeExec serializer",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/exchange/ShuffleExchangeExec.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: with Kryo and spark.kryo.registrationRequired=true, a DataFrame groupBy, sort-merge join, broadcast hash join, and PySpark reduceByKey all succeeded, MEMORY_AND_DISK_DESER persist succeeded, but MEMORY_ONLY and DISK_ONLY DataFrame persists failed with 'Class is not registered: org.apache.spark.sql.execution.columnar.DefaultCachedBatch'."
+  },
+  {
+    "id": "gap-pyspark-pickling",
+    "topic": "partitions-shuffles",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "In a PySpark RDD job, what gets pickled, and why does a function that captures a driver-side client fail before any task runs?",
+    "answer": "PySpark RDD functions and records live in Python. The driver pickles each function with cloudpickle, together with every variable it captures, and sends it to Python worker processes. Records move between the JVM and those workers as pickled batches; the default context serializer is AutoBatchedSerializer over CloudPickleSerializer. An RDD shuffle such as reduceByKey or partitionBy hashes keys in Python and lets the JVM shuffle key-hash and pickled-byte pairs. A captured object that cannot be pickled, such as a socket, a lock, or a live client, fails on the driver with PicklingError before tasks start. Create such resources inside the function on the executor, typically once per partition. This per-record pickling is also why Python RDD code costs more than DataFrame expressions, which stay in the JVM's binary rows unless a Python UDF pulls them out.",
+    "followup": "Why does choosing a serialized storage level for a PySpark RDD not change how its records are stored?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "RDD programming guide: understanding closures",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#understanding-closures-"
+      },
+      {
+        "title": "RDD programming guide: RDD persistence",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#rdd-persistence"
+      },
+      {
+        "title": "PySpark source: RDD.partitionBy and PairwiseRDD",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/python/pyspark/rdd.py"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: sc.serializer printed AutoBatchedSerializer(CloudPickleSerializer()), reduceByKey produced correct totals, and closures capturing a threading.Lock or a driver socket raised PicklingError: Could not serialize object before any task ran."
+  },
+  {
+    "id": "gap-config-precedence",
+    "topic": "architecture",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "The same property is set in spark-defaults.conf, with --conf on spark-submit, and on the SparkSession builder. Which value wins, and when does the builder value not apply?",
+    "answer": "Spark merges all three. Values set directly on SparkConf in the application win, then flags passed to spark-submit or spark-shell, then spark-defaults.conf. Builder .config() calls reach that SparkConf when the builder creates a new SparkContext. The trap is getOrCreate() on a session that already exists, as in a notebook or shell. It returns the existing session with a warning that only runtime SQL configurations will take effect, so a builder value such as spark.executor.memory is silently ignored. Some settings must be known before a process starts: in client mode, spark.driver.memory cannot be set from SparkConf in the application because the driver JVM is already running. Put resource settings in spark-submit flags or cluster defaults, and keep query settings in code or session configuration.",
+    "followup": "Where would you confirm the property values an application actually ran with?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Configuration: dynamically loading Spark properties",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html#dynamically-loading-spark-properties"
+      },
+      {
+        "title": "Configuration: application properties",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html#application-properties"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: with spark.sql.shuffle.partitions set to 11 in spark-defaults.conf, 22 through spark-submit --conf, and 33 on the builder, the application saw 11, 22, and 33 as each layer was added; getOrCreate() on an existing session warned 'only runtime SQL configurations will take effect', applied shuffle partitions 16, and left spark.executor.memory unset."
+  },
+  {
+    "id": "gap-static-runtime-config",
+    "topic": "architecture",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Why does spark.conf.set work for spark.sql.shuffle.partitions but fail for spark.sql.extensions and spark.executor.memory?",
+    "answer": "spark.conf is the session's runtime configuration. Runtime SQL configurations such as spark.sql.shuffle.partitions are per-session and mutable, so a new value applies to queries planned afterwards. Static SQL configurations such as spark.sql.extensions and spark.sql.warehouse.dir are fixed once the SQL engine starts; setting one raises 'Cannot modify the value of a static config'. Core settings such as spark.executor.memory belong to SparkConf and are read when executors launch. Since Spark 3.0, spark.conf.set or SQL SET on such a key raises CANNOT_MODIFY_CONFIG instead of silently doing nothing. spark.conf.isModifiable(key) tells you in advance. Keys Spark does not recognize are accepted: a custom application key works, but so does a misspelled one such as spark.sql.shufle.partitions, and the real setting stays unchanged. Changing a static setting needs a new application.",
+    "followup": "How would you catch a misspelled Spark SQL configuration key before it silently does nothing?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Configuration: Spark SQL runtime and static configurations",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html#spark-sql"
+      },
+      {
+        "title": "Spark SQL migration guide: 2.4 to 3.0 SET command",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-migration-guide.html#upgrading-from-spark-sql-24-to-30"
+      },
+      {
+        "title": "Spark SQL reference: SET",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-aux-conf-mgmt-set.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: isModifiable returned True for spark.sql.shuffle.partitions and False for spark.sql.extensions and spark.executor.memory; setting the static keys raised 'Cannot modify the value of a static config', spark.executor.memory raised CANNOT_MODIFY_CONFIG through both spark.conf.set and SQL SET, and a misspelled key was accepted while spark.sql.shuffle.partitions stayed 200."
+  },
+  {
+    "id": "gap-range-sort-partitionby",
+    "topic": "partitions-shuffles",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "What do repartitionByRange, sortWithinPartitions, and write.partitionBy each control, and how do you combine them for an output layout?",
+    "answer": "They act at different levels. repartitionByRange(n, col) shuffles rows into n execution partitions that each hold a contiguous key range. Boundaries come from sampling, so they are approximate and can vary between runs. sortWithinPartitions(col) sorts inside each existing partition without a shuffle, while orderBy adds a range exchange to produce a total order. write.partitionBy(col) controls directories: one col=value directory per distinct value, with the column stored in the path rather than in the data files. Combine them by purpose. Use partitionBy for low-cardinality columns that queries filter on, repartition or repartitionByRange on those columns to bound files per directory, and sortWithinPartitions on a high-cardinality filter column so Parquet min/max statistics can skip row groups.",
+    "followup": "Why can two runs of the same repartitionByRange produce slightly different partition boundaries?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark API: DataFrame.repartitionByRange",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.repartitionByRange.html"
+      },
+      {
+        "title": "PySpark API: DataFrame.sortWithinPartitions",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.sortWithinPartitions.html"
+      },
+      {
+        "title": "PySpark API: DataFrameWriter.partitionBy",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrameWriter.partitionBy.html"
+      },
+      {
+        "title": "Spark SQL performance tuning: partitioning hints",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html#coalesce-hints-for-sql-queries"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: repartitionByRange(3, 'id') over ids 0 to 999 produced ranges 0-330, 331-668, and 669-999, sortWithinPartitions planned Sort with global=false and no Exchange, orderBy planned Exchange rangepartitioning plus a global Sort, and partitioned Parquet files contained only the non-partition column."
+  },
+  {
+    "id": "gap-files-per-partition-dir",
+    "topic": "partitions-shuffles",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A job writes with partitionBy(\"day\") and every day directory ends up with many small files. Why, and how do you get one file per day?",
+    "answer": "Write tasks determine the file count, not partitionBy. Each task writes a separate file for every day value in its partition, so N tasks whose rows span all days produce up to N files in each directory. With 4 input partitions and 3 days, partitionBy(\"day\") alone wrote 4 files per directory. Adding repartition(\"day\") first hash-partitions on the directory column, so each day's rows meet in one task, and that run wrote 1 file per directory. The cost is a shuffle, plus one task and one file per value: a large or skewed day becomes a huge file and a straggler. Cap file size with the maxRecordsPerFile write option or spark.sql.files.maxRecordsPerFile; with a cap of 50 on the unrepartitioned write, each directory held 8 files. coalesce reduces tasks but does not group rows by day.",
+    "followup": "If one day holds far more data than the rest, how would you bound file size while still limiting files per directory?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark API: DataFrameWriter.partitionBy",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrameWriter.partitionBy.html"
+      },
+      {
+        "title": "PySpark API: DataFrame.repartition",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.repartition.html"
+      },
+      {
+        "title": "Configuration: spark.sql.files.maxRecordsPerFile",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html#spark-sql"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: 1,000 rows in 4 partitions across 3 days wrote 4 files per day directory with partitionBy alone, 1 file per directory after repartition('day') or repartitionByRange on day, and 8 files per directory with maxRecordsPerFile=50 on the unrepartitioned write (AQE disabled)."
+  },
+  {
+    "id": "gap-temp-global-views",
+    "topic": "dataframes",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "What is the difference between a temporary view, a global temporary view, and a table saved with saveAsTable?",
+    "answer": "createOrReplaceTempView gives a DataFrame's plan a name in the current SparkSession only. It stores no data, so each query reruns the plan and sees changes in the underlying table, and the view disappears with that session. createOrReplaceGlobalTempView registers the view in the system database global_temp. Every session in the same application can see it, but only by the qualified name global_temp.name, and it lasts until the application stops. saveAsTable writes data files and registers a catalog table that survives the application only if the catalog is persistent. Neither kind of view is cached; use spark.catalog.cacheTable when you want reuse. You also cannot create a persistent view with CREATE VIEW over a temporary view, because the persistent object would reference something that disappears.",
+    "followup": "Two sessions in one application need the same lookup view. Which view type works, and what lifetime risk remains?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark SQL getting started: global temporary view",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-getting-started.html#global-temporary-view"
+      },
+      {
+        "title": "PySpark API: DataFrame.createGlobalTempView",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.createGlobalTempView.html"
+      },
+      {
+        "title": "Spark SQL guide: saving to persistent tables",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-load-save-functions.html#saving-to-persistent-tables"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: spark.newSession() could not resolve the temp view or the unqualified global view (TABLE_OR_VIEW_NOT_FOUND) but read global_temp.orders_g, a temp view over a table counted 5 and then 6 rows after INSERT INTO the table, and CREATE VIEW over the temp view raised INVALID_TEMP_OBJ_REFERENCE."
+  },
+  {
+    "id": "gap-mappartitions-connections",
+    "topic": "architecture",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Each row needs a lookup against an external service. Why use mapPartitions or foreachPartition instead of map, and what can still go wrong?",
+    "answer": "Create the client inside the function that runs on the executor, once per partition, and reuse it for every row in that partition. In a run over 1,000 rows in 4 partitions, a client built inside map was constructed 1,000 times; inside mapPartitions it was constructed 4 times. A client created on the driver and captured in the closure fails before any task runs because it cannot be pickled. Two traps remain. The partition iterator is lazy: if the function returns a generator expression and closes the client before returning, the lookups run after close and the task fails. Yield inside try/finally, or materialize the batch before closing. Tasks can also be retried or run speculatively, so writes from foreachPartition must be idempotent. The partition count sets how many clients run concurrently, so size it to what the service can handle.",
+    "followup": "How would you bound the number of concurrent connections to the service without changing the upstream partitioning?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark API: RDD.mapPartitions",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/api/pyspark.RDD.mapPartitions.html"
+      },
+      {
+        "title": "PySpark API: DataFrame.foreachPartition",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.foreachPartition.html"
+      },
+      {
+        "title": "RDD programming guide: understanding closures",
+        "url": "https://spark.apache.org/docs/3.5.7/rdd-programming-guide.html#understanding-closures-"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 (local mode, JDK 17) on 2026-09-15: a client counter recorded 1,000 constructions under map and 4 under mapPartitions, a captured driver socket raised PicklingError, returning a lazy generator after closing the client failed the task with RuntimeError('client already closed'), and a try/finally generator returned all 10 values."
+  },
+  {
+    "id": "catalyst-analyze-cbo",
+    "topic": "catalyst-aqe",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "You ran ANALYZE TABLE on a catalog table, but explain(\"cost\") still shows the same size estimate for a selective filter. Why?",
+    "answer": "Collected statistics are only half of it. By default Spark estimates plan sizes with a size-only visitor, and a filter keeps its child's size estimate. Row counts and column statistics drive estimation only when spark.sql.cbo.enabled is true, and it is false by default in 3.5.7. On a local 1,000-row table filtered to amount > 900, the estimate stayed 5.5 KiB with or without table statistics while CBO was off. With CBO on and ANALYZE TABLE ... COMPUTE STATISTICS FOR COLUMNS amount, it became rowCount=100 and 2000 B. Plain ANALYZE collects size and row count; column statistics need FOR COLUMNS. Statistics are not refreshed automatically by default, so re-run the command after large data changes. Join reordering additionally needs spark.sql.cbo.joinReorder.enabled.",
+    "followup": "Why can stale statistics be worse than no statistics for a broadcast decision?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 SQL reference: ANALYZE TABLE",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-aux-analyze-table.html"
+      },
+      {
+        "title": "Spark 3.5.7 SQL reference: EXPLAIN and its modes",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-explain.html"
+      },
+      {
+        "title": "SizeInBytesOnlyStatsPlanVisitor source (v3.5.7): default size estimates",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/plans/logical/statsEstimation/SizeInBytesOnlyStatsPlanVisitor.scala"
+      },
+      {
+        "title": "CostBasedJoinReorder source (v3.5.7): CBO and join-reorder switches",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/CostBasedJoinReorder.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the filter estimate stayed 5.5 KiB until CBO was enabled with column statistics, then became rowCount=100 and 2000 B."
+  },
+  {
+    "id": "catalyst-explain-no-codegen-markers",
+    "topic": "catalyst-aqe",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "explain() on an aggregation shows no *(n) markers. Has whole-stage code generation been disabled?",
+    "answer": "Probably not. With adaptive query execution on, the 3.5.7 default, a query containing an exchange is wrapped in AdaptiveSparkPlan, and codegen stages are collapsed for each query stage as the adaptive plan runs. The pre-execution tree, marked isFinalPlan=false, therefore lists operators without stars, and explain(\"codegen\") reported zero WholeStageCodegen subtrees in a local run. After an action, explain() on the same DataFrame printed the final plan with *(1) around the scan, filter, project, and partial aggregate and *(2) around the final aggregate. With AQE disabled, both stages appeared before execution. Missing stars can also be real: ObjectHashAggregate, BatchEvalPython, or a Project whose expression needs the interpreted fallback all sit outside generated code.",
+    "followup": "Why is a codegen stage ID not the same as a scheduler stage ID?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 SQL reference: EXPLAIN and its modes",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-explain.html"
+      },
+      {
+        "title": "WholeStageCodegenExec source (v3.5.7): CollapseCodegenStages and fallbacks",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/WholeStageCodegenExec.scala"
+      },
+      {
+        "title": "AdaptiveSparkPlanExec source (v3.5.7): query stages and re-planning",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/AdaptiveSparkPlanExec.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the adaptive plan showed no codegen markers before collect() and *(1) and *(2) afterwards; with AQE off they appeared before execution."
+  },
+  {
+    "id": "catalyst-first-physical-plan",
+    "topic": "catalyst-aqe",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "Does Spark generate several physical plans and pick the cheapest one?",
+    "answer": "Not in Spark 3.5.7. The planner applies its strategies to the optimized logical plan, and QueryExecution takes the first physical plan returned; the source comment says it uses next() for now and will implement choosing the best plan later. Choices that look cost-based are rules over estimates: JoinSelection checks hints, then whether a side's estimated size fits spark.sql.autoBroadcastJoinThreshold, then the shuffled hash conditions, then sort-merge join for sortable keys. Cost-based optimization in this version improves the logical side — cardinality estimates and join reordering — when statistics are collected and spark.sql.cbo.enabled and spark.sql.cbo.joinReorder.enabled are set. At run time, AQE revisits some decisions with measured shuffle sizes, which is the closest thing to feedback.",
+    "followup": "If the estimates are wrong, which mechanism can still correct the join strategy, and when is it too late to save the shuffle?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "QueryExecution source (v3.5.7): planning phases, createSparkPlan, and preparations",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/QueryExecution.scala"
+      },
+      {
+        "title": "QueryPlanner source (v3.5.7): strategies and candidate plans",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/planning/QueryPlanner.scala"
+      },
+      {
+        "title": "SparkStrategies source (v3.5.7): JoinSelection rule order",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala"
+      },
+      {
+        "title": "CostBasedJoinReorder source (v3.5.7): CBO and join-reorder switches",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/CostBasedJoinReorder.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7"
+  },
+  {
+    "id": "catalyst-aqe-broadcast-shuffle-cost",
+    "topic": "catalyst-aqe",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "AQE converted a sort-merge join into a broadcast hash join at run time. Did the query avoid shuffling the large table?",
+    "answer": "No — it had already shuffled it. AQE decides after a shuffle map stage finishes and reports its output size, so both sides' map stages have run and written shuffle files before the switch. In a local run, the initial plan was SortMergeJoin because a filtered Parquet side kept a 13.4 MiB file-size estimate against a 1 MiB threshold; the final plan was BroadcastHashJoin, with AQEShuffleRead local over ShuffleQueryStage 0 and 1. The switch saves the sorts and, through the local shuffle reader, reduce-side network fetches. To skip the large side's shuffle entirely, the static plan must choose broadcast: accurate statistics, a smaller estimate, or a broadcast hint on a side you have confirmed fits in memory.",
+    "followup": "What would you check before adding a BROADCAST hint to force that plan?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 SQL performance tuning: join hints and adaptive query execution",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-performance-tuning.html"
+      },
+      {
+        "title": "AdaptiveSparkPlanExec source (v3.5.7): query stages and re-planning",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/adaptive/AdaptiveSparkPlanExec.scala"
+      },
+      {
+        "title": "SparkStrategies source (v3.5.7): JoinSelection rule order",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/SparkStrategies.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a sort-merge join planned from a 13.4 MiB estimate became a broadcast hash join only after both shuffle map stages had run."
+  },
+  {
+    "id": "pyudf-mapinpandas-applyinpandas",
+    "topic": "pyspark-udfs",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "mapInPandas or groupBy().applyInPandas — how do you choose between them?",
+    "answer": "Choose by what the function needs to see. mapInPandas receives an iterator of pandas DataFrames per partition, sized by spark.sql.execution.arrow.maxRecordsPerBatch, and may return any number of rows. It needs no shuffle; locally it planned as MapInPandas directly over the scan. Use it for batch-local work such as parsing or scoring. applyInPandas passes one pandas DataFrame per group, so it requires a full shuffle: the plan was Exchange, Sort, then FlatMapGroupsInPandas. Use it only when the logic needs all rows of a key together. Its risk is memory: each whole group is loaded into the Python worker, maxRecordsPerBatch does not split it, and a skewed key can fail the task. If a built-in aggregate or window function expresses the logic, prefer that.",
+    "followup": "How would you handle a key whose group is too large for one Python worker?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark 3.5.7 user guide: Apache Arrow, pandas UDFs, and Arrow Python UDFs",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      },
+      {
+        "title": "PySpark 3.5.7: DataFrame.mapInPandas",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.mapInPandas.html"
+      },
+      {
+        "title": "PySpark 3.5.7: GroupedData.applyInPandas",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.GroupedData.applyInPandas.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: mapInPandas planned as MapInPandas without an exchange, while applyInPandas planned as Exchange, Sort, and FlatMapGroupsInPandas."
+  },
+  {
+    "id": "pyudf-topandas-arrow-driver",
+    "topic": "pyspark-udfs",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "Enabling Arrow made toPandas() faster, but the driver still runs out of memory. Why?",
+    "answer": "Arrow changes the conversion format, not where the data ends up. With spark.sql.execution.arrow.pyspark.enabled=true, results reach the driver as Arrow record batches and become a pandas DataFrame far more cheaply than row-by-row conversion; a local 500,000-row, two-column example took 0.42 s with Arrow against 1.46 s without, on one laptop. But toPandas() still loads every row into driver memory, and the API notes say to use it only when the result is expected to be small. The experimental spark.sql.execution.arrow.pyspark.selfDestruct.enabled option exists to reduce memory during conversion. Aggregate or sample in Spark first, or write large results to storage. If Arrow conversion fails before computation, Spark falls back to the slower path unless spark.sql.execution.arrow.pyspark.fallback.enabled is false.",
+    "followup": "Which settings and data types would you check if toPandas() is slow even with Arrow enabled?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark 3.5.7 user guide: Apache Arrow, pandas UDFs, and Arrow Python UDFs",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      },
+      {
+        "title": "PySpark 3.5.7: DataFrame.toPandas",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.toPandas.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: toPandas() on 500,000 rows took 0.42 s with Arrow and 1.46 s without on one laptop, returning all rows to the driver both times."
+  },
+  {
+    "id": "pyudf-arrow-batch-size",
+    "topic": "pyspark-udfs",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A pandas UDF over very wide rows fails with memory errors. What does spark.sql.execution.arrow.maxRecordsPerBatch change, and where does it not help?",
+    "answer": "It caps how many rows Spark puts into one Arrow record batch, and so how large each pandas Series or DataFrame your function receives. The default is 10,000 rows. Locally, a pandas UDF over one 25,000-row partition received batches of 10,000, 10,000, and 5,000 rows; at 1,000, every batch had 1,000. The cap counts rows, not bytes, so wide rows or large strings need a lower value, and the guide notes that building batches can temporarily raise JVM memory. It does not help grouped APIs: applyInPandas and cogroup load each whole group as one batch. Also check where the pandas objects live — Python worker memory, budgeted by memoryOverhead or spark.executor.pyspark.memory.",
+    "followup": "Why can lowering the batch size make a vectorized UDF slower?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark 3.5.7 user guide: Apache Arrow, pandas UDFs, and Arrow Python UDFs",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/user_guide/sql/arrow_pandas.html"
+      },
+      {
+        "title": "Spark 3.5.7 configuration: PySpark memory, overhead, Python workers, Arrow",
+        "url": "https://spark.apache.org/docs/3.5.7/configuration.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a pandas UDF saw batches of 10,000, 10,000, and 5,000 rows at the default and 1,000-row batches with maxRecordsPerBatch=1000."
+  },
+  {
+    "id": "pyudf-udf-evaluated-twice",
+    "topic": "pyspark-udfs",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A Python UDF calls a rate-limited service. You select its result and then filter on that column. How many times can it run per row?",
+    "answer": "More than once. Spark treats a UDF as deterministic unless you call asNondeterministic(), and the API notes warn that optimization may remove duplicate invocations or invoke the function more times than it appears. In a local plan, filtering on a selected UDF column let the optimizer push the filter below the projection by copying the UDF expression, so two BatchEvalPython operators evaluated it. Marked non-deterministic, the filter stayed above a single BatchEvalPython. Task retries and speculative attempts can still repeat calls, so non-determinism is not exactly-once. For side effects, avoid a UDF: call the service in a separate, idempotent step — for example mapInPandas with explicit batching — and join the results back.",
+    "followup": "What other optimizations does marking an expression non-deterministic give up?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "PySpark 3.5.7: pyspark.sql.functions.udf (useArrow, determinism notes)",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.functions.udf.html"
+      },
+      {
+        "title": "ExtractPythonUDFs source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/python/ExtractPythonUDFs.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the deterministic UDF appeared in two BatchEvalPython operators after filter pushdown, and in one when marked asNondeterministic()."
+  },
+  {
+    "id": "stream-microbatch-vs-continuous",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Micro-batch versus continuous processing: what actually differs?",
+    "answer": "The default micro-batch engine turns each trigger into a small batch job: the driver picks an offset range, logs it, plans an incremental Spark SQL query, and commits after the sink finishes. The guide quotes latencies as low as about 100 ms with exactly-once guarantees. Continuous processing, still experimental in Spark 3.5.7, runs long-lived tasks that read and write continuously and checkpoints progress at the trigger interval. The guide quotes about 1 ms, but only at-least-once guarantees. It accepts only map-like operations (projections and filters; no aggregations, current_timestamp, or current_date), the Kafka and rate sources, and the Kafka, memory, and console sinks, and failed tasks are not retried automatically. Locally, a rate-to-memory filter ran continuously, while an aggregation and a file source were rejected with AnalysisException.",
+    "followup": "Why can't foreachBatch be used with a continuous trigger?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: continuous processing",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#continuous-processing"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: overview and latency",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#overview"
+      },
+      {
+        "title": "UnsupportedOperationChecker source (v3.5.7): continuous-mode restrictions",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/analysis/UnsupportedOperationChecker.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a rate-source filter into a memory sink ran under trigger(continuous='1 second') and reported no progress, while an aggregation and a file source were rejected with AnalysisException."
+  },
+  {
+    "id": "stream-exactly-once",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How does Structured Streaming deliver exactly-once results end to end?",
+    "answer": "Through replay, not one atomic commit. Before a micro-batch runs, the driver writes its offset range to offsets/N in the checkpoint; stateful tasks write a new state version; the sink writes output; only then does the driver write commits/N. After a crash, an offsets entry without a matching commit means batch N is re-run over exactly the same range. That yields exactly-once output only if the source can replay that range (files still present, Kafka offsets still retained) and the sink tolerates the re-run. The file sink is documented as exactly-once, while the Kafka and foreach sinks are at-least-once. In a local crash test, a foreachBatch Parquet append duplicated the replayed batch; a Delta write keyed by txnAppId and txnVersion did not.",
+    "followup": "If you delete the checkpoint and restart a Delta foreachBatch writer, why must txnAppId change?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: fault-tolerance semantics",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#fault-tolerance-semantics"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: output sinks and their guarantees",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#output-sinks"
+      },
+      {
+        "title": "MicroBatchExecution source (v3.5.7): offset log, commit log, recovery",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/MicroBatchExecution.scala"
+      },
+      {
+        "title": "Delta Lake documentation: idempotent table writes in foreachBatch",
+        "url": "https://docs.delta.io/delta-streaming/#idempotent-table-writes-in-foreachbatch"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a crash after the sink write but before commits/1 replayed batch 1 on restart, duplicating a Parquet append while a Delta write with txnAppId and txnVersion skipped it."
+  },
+  {
+    "id": "stream-watermarks-late-data",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "How does a watermark decide which late data is dropped?",
+    "answer": "At the end of each micro-batch the engine takes the maximum event time seen and subtracts the withWatermark delay; the result is the watermark for the next batch. With several inputs the global watermark is the minimum by default. It follows event time, not the wall clock, so it stalls when data stops. The guarantee is one-directional: rows within the delay are never dropped, and older rows may or may not be. For a windowed aggregation the test is the window's end, not the row's timestamp. Locally, with the watermark at 12:12 and 5-minute windows, a 12:11:30 row was still counted because its window ends at 12:15, while a 12:09 row was dropped and counted in numRowsDroppedByWatermark. Watermarks evict aggregation state only in append or update mode.",
+    "followup": "Why does an append-mode windowed count emit nothing for a window until a later batch?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: handling late data and watermarking",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#handling-late-data-and-watermarking"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: policy for multiple watermarks",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#policy-for-handling-multiple-watermarks"
+      },
+      {
+        "title": "statefulOperators source (v3.5.7): window-end eviction and dropped-row metric",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/statefulOperators.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: with a 10-minute watermark at 12:12, a 12:11:30 row joined the 12:10 window while a 12:09 row was dropped and numRowsDroppedByWatermark reported 1."
+  },
+  {
+    "id": "stream-output-modes",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "When would you choose append, update, or complete output mode?",
+    "answer": "Append writes only rows that will never change, update writes rows that changed in this batch, and complete rewrites the whole result table every batch. Which modes are legal depends on the query. Queries without aggregation support append, where update behaves the same, and reject complete. An aggregation without a watermark supports update and complete; append raises an AnalysisException because counts can still change. With an event-time watermark, append works but emits each window once, after the watermark passes its end, so output lags by the delay. Complete mode keeps every aggregate in state forever. Stream-stream joins support append only. Pick append for file-like sinks that cannot rewrite rows, update for upsert-capable sinks, and complete only for small result tables.",
+    "followup": "Why is sorting a streaming DataFrame allowed only after an aggregation in complete mode?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: output modes",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#output-modes"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: unsupported operations",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#unsupported-operations"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: append on an aggregation without a watermark and complete without an aggregation both raised AnalysisException, and update emitted only changed keys while complete re-emitted all of them."
+  },
+  {
+    "id": "stream-checkpoint-contents",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What lives in a streaming checkpoint directory, and why can't you freely change a stateful query that uses it?",
+    "answer": "metadata holds the query id that survives restarts. offsets/N is the write-ahead record of each batch's source offsets, plus the watermark, batch timestamp, and pinned settings such as the shuffle-partition count and state store provider. commits/N marks batches whose output finished. sources/ holds source-specific logs, such as which files the file source took, and state/ holds versioned state per operator and partition. A restart reuses all of it, so the new plan must match what was stored, and Spark compares state schemas by field count, types, and nullability, not names. Locally, switching count to sum and adding a grouping key both failed with StateSchemaNotCompatible, but swapping one string key for another ran silently and reused the old keys' counts. The guide lists any stateful schema change as not allowed.",
+    "followup": "Which changes to a streaming query are allowed on the same checkpoint?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: recovery semantics after changes in a streaming query",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#recovery-semantics-after-changes-in-a-streaming-query"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: configurations not modifiable after the query has run",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#additional-information"
+      },
+      {
+        "title": "OffsetSeq source (v3.5.7): configurations recorded in the offset log",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/OffsetSeq.scala"
+      },
+      {
+        "title": "StateSchemaCompatibilityChecker source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/execution/streaming/state/StateSchemaCompatibilityChecker.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the checkpoint held metadata, offsets/, commits/, and sources/ (plus state/ when stateful); count-to-sum and an added key failed with StateSchemaNotCompatible, while a same-type key swap restarted silently."
+  },
+  {
+    "id": "stream-trigger-types",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "What trigger types exist, and when would you use each?",
+    "answer": "With no trigger, the next micro-batch starts as soon as the previous one finishes. processingTime runs batches on a fixed interval; an overrunning batch is followed immediately, and no new data means no batch. availableNow processes everything available at start, possibly across several batches that respect source limits such as maxFilesPerTrigger. It finishes uncommitted batches first, advances the watermark per batch with a final no-data batch, then stops, which suits scheduled incremental jobs. once does the same in a single batch and is deprecated in the 3.5.7 guide in favor of availableNow. continuous selects the experimental low-latency engine with at-least-once guarantees; its interval is a checkpoint interval, not a batch size. Locally, each availableNow run on one checkpoint read only newly added files.",
+    "followup": "Why does availableNow keep state smaller than once for a stateful query with a large backlog?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: triggers",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#triggers"
+      },
+      {
+        "title": "PySpark 3.5.7 API: DataStreamWriter.trigger",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.trigger.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: each availableNow run on the same checkpoint processed only newly added files, ran a no-data batch when the watermark advanced, and stopped; trigger(once=True) printed no Python warning."
+  },
+  {
+    "id": "coding-stream-scd-join",
+    "topic": "structured-streaming",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Join a stream of orders to a slowly changing customer dimension. What does each micro-batch actually see?",
+    "answer": "Start with a stream-static left join from the order stream to a batch read of the Delta dimension. It is stateless, and the static side is re-planned in every micro-batch. What that means depends on the static DataFrame. Locally, with another application updating the table between batches, an uncached Delta read returned the new version in the next batch. A cached Delta or Parquet DataFrame kept serving old rows, a plain Parquet directory read kept its original file list, and overwriting that directory made the query fail on a missing file. Either way you get the dimension as of processing time, so a late event joins the current row. For event-time correctness, join an SCD Type 2 table on key and validity range. A watermarked stream-stream join is the alternative when changes arrive as a stream, but it is append-only and can match several versions.",
+    "followup": "In the stream-stream version, how would you keep only the latest dimension version per order?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: stream-static joins",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#stream-static-joins"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: stream-stream joins",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#stream-stream-joins"
+      },
+      {
+        "title": "Delta Lake documentation: table streaming reads and writes",
+        "url": "https://docs.delta.io/delta-streaming/"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: with a separate Spark application updating the dimension between micro-batches, an uncached Delta static side returned the new version in the next batch, while cached Delta, cached Parquet, and a plain Parquet directory read returned the old rows."
+  },
+  {
+    "id": "stream-dedup-within-watermark",
+    "topic": "structured-streaming",
+    "type": "Concept",
+    "origin": "practice",
+    "question": "A producer retries events with a fresh timestamp. Should you use dropDuplicates or dropDuplicatesWithinWatermark, and what does each do to state?",
+    "answer": "dropDuplicates on the event id alone must remember every id forever, because Spark cannot know when a duplicate stops arriving. Adding the event-time column to the key lets the watermark bound state, but then copies with different timestamps are not duplicates. dropDuplicatesWithinWatermark, new in Spark 3.5.0, requires a watermark and deduplicates on the id alone while copies fall within the delay, then evicts the id. Locally, with a 10-minute delay, id a at 12:00 and again at 12:03 was emitted once; after data at 12:30 moved the watermark to 12:20, two ids were evicted and a copy of a at 12:31 was emitted again. Plain dropDuplicates suppressed that copy, but its state never shrank. Set the delay longer than the largest timestamp gap between duplicates.",
+    "followup": "What happens to a retried copy that arrives with an event time older than the current watermark?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: streaming deduplication",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#streaming-deduplication"
+      },
+      {
+        "title": "PySpark 3.5.7 API: DataFrame.dropDuplicatesWithinWatermark",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.dropDuplicatesWithinWatermark.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: dropDuplicatesWithinWatermark emitted id a once for 12:00 and 12:03, evicted two ids when the watermark reached 12:20, and re-emitted a at 12:31, while plain dropDuplicates kept all ids in state."
+  },
+  {
+    "id": "stream-foreachbatch-idempotence",
+    "topic": "structured-streaming",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A foreachBatch job appends each micro-batch to a table and sometimes leaves duplicate rows after a restart. Why, and how do you fix it?",
+    "answer": "foreachBatch is at-least-once by default. The driver writes commits/N only after your function returns, so a crash after your write but before that commit re-runs batch N with the same batchId and, for a deterministic query, the same rows. A plain append writes them twice; locally, a Parquet append ended with order 3 duplicated. Make the write idempotent. For Delta, pass txnAppId (stable for this checkpoint) and txnVersion set to batchId, and Delta skips a transaction it has already committed. Otherwise, MERGE on a business key or overwrite a partition keyed by batch. If the function writes the batch more than once, persist it first: without that, numInputRows for a two-row batch reported 6 because the batch was computed three times.",
+    "followup": "Why must txnAppId change when the query starts on a new checkpoint?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: foreachBatch",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#foreachbatch"
+      },
+      {
+        "title": "PySpark 3.5.7 API: DataStreamWriter.foreachBatch",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.DataStreamWriter.foreachBatch.html"
+      },
+      {
+        "title": "Delta Lake documentation: idempotent table writes in foreachBatch",
+        "url": "https://docs.delta.io/delta-streaming/#idempotent-table-writes-in-foreachbatch"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: after a simulated crash before commits/1, the replay duplicated a Parquet append but not a Delta append with txnAppId and txnVersion, and an unpersisted batch written twice plus counted reported numInputRows 6 for 2 rows."
+  },
+  {
+    "id": "stream-state-growth-rocksdb",
+    "topic": "structured-streaming",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A stateful streaming query gets slower week after week, with long GC pauses on executors. What do you check, and when does the RocksDB state store help?",
+    "answer": "First check whether state can ever be evicted. In lastProgress, stateOperators reports numRowsTotal, numRowsRemoved, and memoryUsedBytes. A total that only grows means no watermark, a watermark on the wrong column, complete mode, or keys with no time bound. Locally, a plain dropDuplicates never removed a row while the watermarked version removed two. Fix eviction first. The default HDFS-backed provider keeps state in executor JVM memory, so millions of keys mean GC pressure. Setting spark.sql.streaming.stateStore.providerClass to RocksDBStateStoreProvider moves state into native memory and local disk and still checkpoints it; locally its state directory held versioned zip files and SST files, and customMetrics exposed RocksDB counters. Choose the provider before the first run: the guide says it must not change on an existing checkpoint.",
+    "followup": "Why does switching to RocksDB not remove the need for a watermark?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: RocksDB state store",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#rocksdb-state-store-implementation"
+      },
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: configurations not modifiable after the query has run",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#additional-information"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: with RocksDBStateStoreProvider, watermarked deduplication reported numRowsRemoved 2 while plain dropDuplicates kept numRowsTotal at 3, and state/ contained versioned zip and SST files."
+  },
+  {
+    "id": "stream-lastprogress-falling-behind",
+    "topic": "structured-streaming",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "How do you tell from lastProgress whether a streaming query is falling behind its input, and where the time goes?",
+    "answer": "Compare several entries of recentProgress, not one. If processedRowsPerSecond stays below inputRowsPerSecond, or durationMs.triggerExecution is longer than the trigger interval, batches are growing. For sources that report it, a latestOffset ahead of endOffset means data is waiting; Kafka reports offsets per topic partition. Then locate the time. durationMs splits into latestOffset and getBatch (source discovery), queryPlanning, walCommit and commitOffsets (the offset and commit logs), and addBatch (running the batch and writing the sink). A large addBatch points at processing or the sink, a growing stateOperators numRowsTotal points at state, and slow commits point at checkpoint storage. Locally the file source reported latestOffset as null, and a continuous query reported no progress at all.",
+    "followup": "Why can numInputRows exceed the rows actually added when a foreachBatch function uses the batch twice?",
+    "source": "Authored practice question; not a reported interview question.",
+    "references": [
+      {
+        "title": "Spark 3.5.7 Structured Streaming guide: reading metrics interactively",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html#reading-metrics-interactively"
+      },
+      {
+        "title": "StreamingQueryProgress source (v3.5.7): progress fields",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/core/src/main/scala/org/apache/spark/sql/streaming/progress.scala"
+      },
+      {
+        "title": "PySpark 3.5.7 API: StreamingQuery.lastProgress",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.ss/api/pyspark.sql.streaming.StreamingQuery.lastProgress.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a file-source query's lastProgress exposed durationMs keys addBatch, commitOffsets, getBatch, latestOffset, queryPlanning, triggerExecution, and walCommit with source latestOffset null, and a continuous query's lastProgress was None."
+  },
+  {
+    "id": "coding-dedup-latest",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Deduplicate a table so that only the latest record per key survives.",
+    "answer": "Rank rows inside each key and keep the first: row_number over a window partitioned by the key and ordered by the timestamp descending, then keep row number 1. Add a unique tie-breaker such as an ingest ID to the ordering and decide where null timestamps sort, or the survivor of a tie is arbitrary. The window costs one hash shuffle on the key plus a sort within partitions; for a row_number = 1 filter, Spark 3.5.7 inserts a WindowGroupLimit before the shuffle so tasks forward only local winners. An aggregation alternative is max over a struct of (timestamp, tie-breaker, payload), or max_by with a struct as the ordering value. Do not rely on orderBy followed by dropDuplicates: it becomes a first() aggregate after a shuffle, and the sort does not decide which row wins. The full solution is in the coding-round lesson.",
+    "followup": "Why did the same orderBy plus dropDuplicates code return the right rows in local[2] mode?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Window functions: SQL reference",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-window.html"
+      },
+      {
+        "title": "pyspark.sql.DataFrame.dropDuplicates",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrame.dropDuplicates.html"
+      },
+      {
+        "title": "Optimizer source (v3.5.7): ReplaceDeduplicateWithAggregate",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/Optimizer.scala"
+      },
+      {
+        "title": "InferWindowGroupLimit source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/InferWindowGroupLimit.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: row_number kept the newest row with the timestamp tie broken by ingest_id, while orderBy plus dropDuplicates kept a non-latest row for 29,351 and then 19,926 of 40,000 keys on a two-executor local cluster with AQE disabled, and for none in local[2]."
+  },
+  {
+    "id": "coding-sessionize",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Sessionize click events so that 30 minutes of inactivity starts a new session.",
+    "answer": "Order each user's events and compare neighbors. Over a window partitioned by user and ordered by timestamp, plus an event ID for equal timestamps, lag gives the previous timestamp; flag a new session when there is no previous event or the gap exceeds 30 minutes; a running sum of the flag over a rows frame from unbounded preceding to the current row numbers the sessions. Agree the boundary first: is a gap of exactly 30 minutes the same session? Both window functions share one specification, so the plan is a single shuffle on the user key and one sort; a very active user still lands in one task. For per-session aggregates, session_window (3.2+) ends each session at the last event plus the gap and also works in Structured Streaming, where lag over a window does not. The full solution is in the coding-round lesson.",
+    "followup": "What must change when the same sessionization runs on a stream with late events?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Window functions: SQL reference",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-window.html"
+      },
+      {
+        "title": "pyspark.sql.functions.session_window",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.functions.session_window.html"
+      },
+      {
+        "title": "Structured Streaming guide: session windows",
+        "url": "https://spark.apache.org/docs/3.5.7/structured-streaming-programming-guide.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: the lag-and-running-sum version and session_window both kept an exactly 30-minute gap inside one session and split a 40-minute gap, and lag on a streaming DataFrame failed with NON_TIME_WINDOW_NOT_SUPPORTED_IN_STREAMING."
+  },
+  {
+    "id": "coding-rolling-active-users",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Compute a running 7-day active user count.",
+    "answer": "Define it first: for each date, the number of distinct users with any activity on that date or the six days before it. Spark 3.5.7 rejects a distinct count over a window frame with DISTINCT_WINDOW_FUNCTION_UNSUPPORTED, and summing daily active counts is wrong twice: a rows frame covers seven rows, not seven calendar days, when dates have gaps, and even a range frame on a day number double-counts users active on several days. A scalable approach deduplicates user-days, explodes each into the seven as-of dates it counts toward, groups by as-of date with a distinct count, and left-joins a date spine so quiet days appear as zero. That is a sevenfold row expansion and two aggregation shuffles, with no global sort. A collect_set over a rangeBetween frame is also correct, but an unpartitioned window moves every row into one partition. The full solution is in the coding-round lesson.",
+    "followup": "How would you change the approach if an approximate count were acceptable at very large scale?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "pyspark.sql.Window.rangeBetween",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.Window.rangeBetween.html"
+      },
+      {
+        "title": "Window functions: SQL reference",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-window.html"
+      },
+      {
+        "title": "Error classes (v3.5.7): DISTINCT_WINDOW_FUNCTION_UNSUPPORTED",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/common/utils/src/main/resources/error/error-classes.json"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: count distinct over a window raised DISTINCT_WINDOW_FUNCTION_UNSUPPORTED; on dates with gaps a 7-row sum of daily counts reported 5 and 8 and a 7-day range sum reported 2 and 5 where the true counts were 2 and 4."
+  },
+  {
+    "id": "coding-scd2-merge",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Implement an SCD Type 2 dimension load with a Delta MERGE.",
+    "answer": "A changed key needs an update and an insert in one MERGE, but a source row either matches or it does not. Stage the source as a union: every batch row keyed by its business key, plus an extra copy of each changed row with a NULL merge key, found by joining the batch to current dimension rows and comparing attributes null-safely. Merge on key equals merge key and is_current: matched rows whose attributes differ are closed with valid_to and is_current false; unmatched rows, meaning new keys and the NULL-keyed copies, are inserted as current. Unchanged rows match but fail the update condition, so replaying the same batch is a no-op. Deduplicate the batch to one row per key first, or Delta raises a multiple-source-rows error. Cost: the staging join is a shuffle or broadcast, and MERGE searches the whole target by default unless the match condition carries partition predicates. The full solution is in the coding-round lesson.",
+    "followup": "What goes wrong if a batch with an older effective date arrives after a newer one?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Delta Lake 3.2.1 documentation source: merge, SCD Type 2, and performance tuning",
+        "url": "https://github.com/delta-io/delta/blob/v3.2.1/docs/source/delta-update.md"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7 · Delta Lake 3.2.1",
+    "runtime": "Behavior checked on local PySpark 3.5.7 with Delta Lake 3.2.1 on 2026-09-15: after two loads the changed key had one closed and one current row, replaying the second load inserted and updated zero rows, and two source rows for one target row raised DELTA_MULTIPLE_SOURCE_ROW_MATCHING_TARGET_ROW_IN_MERGE."
+  },
+  {
+    "id": "coding-top-n-per-group",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Find the top N rows per group efficiently, and explain why orderBy().limit() on the whole frame is wrong.",
+    "answer": "orderBy followed by limit returns the top N of the entire DataFrame, not of each group: one group can take every slot and the others vanish. Its cost is not the issue, because Spark plans it as TakeOrderedAndProject, a top-N selection rather than a full global sort. Per group, rank inside a window partitioned by the group and ordered by the metric, then filter. The tie rule picks the function: row_number returns exactly N rows but needs a deterministic tie-breaker; rank keeps ties and skips numbers (1, 1, 3); dense_rank keeps ties without gaps, so it can return more than N rows. The cost is one hash shuffle on the group key and a sort within partitions; in Spark 3.5.7 a filter such as rn <= N lets the optimizer insert WindowGroupLimit before and after the shuffle, trimming each group early. The full solution is in the coding-round lesson.",
+    "followup": "Which ranking function would you use if the business wants every row tied at the cutoff?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "Window functions: SQL reference",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-ref-syntax-qry-select-window.html"
+      },
+      {
+        "title": "InferWindowGroupLimit source (v3.5.7)",
+        "url": "https://github.com/apache/spark/blob/v3.5.7/sql/catalyst/src/main/scala/org/apache/spark/sql/catalyst/optimizer/InferWindowGroupLimit.scala"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: a row_number filter planned WindowGroupLimit as Partial before the Exchange and Final after it, and orderBy().limit(2) planned as TakeOrderedAndProject and returned the top two rows of all regions."
+  },
+  {
+    "id": "coding-flatten-nested-json",
+    "topic": "coding-round",
+    "type": "Coding",
+    "origin": "practice",
+    "collection": "senior-de",
+    "question": "Flatten a deeply nested JSON document that contains an array-of-structs column.",
+    "answer": "Read with an explicit DDL schema so Spark skips the inference pass and a missing field becomes null instead of changing the schema. Select nested struct fields with dotted paths such as customer.address.city, which are null when a parent struct is null or absent, or expand one level with customer.*. For the array, explode emits one row per element but drops parents whose array is null or empty; explode_outer, posexplode_outer, and inline_outer keep them with null columns. inline turns an array of structs directly into columns, and posexplode keeps each element's position. Generators are narrow, so there is no shuffle, but they multiply rows, and exploding two independent arrays one after the other produces their cross product; explode one array per output, or zip related arrays first. The full solution is in the coding-round lesson.",
+    "followup": "How do you keep malformed JSON records instead of silently losing their content?",
+    "source": "Original practice wording from a supplied senior-prep question bank; not reported as an actual interview question.",
+    "references": [
+      {
+        "title": "JSON files: schema inference and parse modes",
+        "url": "https://spark.apache.org/docs/3.5.7/sql-data-sources-json.html"
+      },
+      {
+        "title": "pyspark.sql.functions.explode_outer",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.functions.explode_outer.html"
+      },
+      {
+        "title": "pyspark.sql.functions.inline_outer",
+        "url": "https://spark.apache.org/docs/3.5.7/api/python/reference/pyspark.sql/api/pyspark.sql.functions.inline_outer.html"
+      }
+    ],
+    "reviewed": "2026-09-15",
+    "version": "Apache Spark 3.5.7",
+    "runtime": "Behavior checked on local PySpark 3.5.7 on 2026-09-15: with a DDL schema, explode returned 2 rows and explode_outer returned 4, keeping the order with an empty array and the order with no items field, and the explode plan had no Exchange."
+  },
+  {
+    "id": "practice-count-csv-read-write",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A CSV read uses header and inferSchema, then calls count() and writes Parquet. How many jobs, stages, and tasks run, and which ones happen before count()?",
+    "exercise": "count-csv-read-write",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-parquet-filter-sql",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A Parquet DataFrame is filtered and shown, then aggregated with a SQL GROUP BY and shown. Why can the second show() start several jobs?",
+    "exercise": "count-parquet-filter-sql",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-repartition-groupby",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "After repartition(10, \"customer_id\"), does groupBy(\"customer_id\").count().show() shuffle again, and how many tasks run?",
+    "exercise": "count-repartition-groupby",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-join-show",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "How do the jobs and stages for orders.join(customers, \"customer_id\").show() change between a broadcast join and a shuffle join?",
+    "exercise": "count-join-show",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-cache-reuse",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "After df.cache(), how many jobs and tasks do df.count() and a filtered count() run, and does the second count read the files again?",
+    "exercise": "count-cache-reuse",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-rdd-groupbykey",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "How many stages and tasks does groupByKey on a three-partition RDD run, and what sets the reduce-side task count?",
+    "exercise": "count-rdd-groupbykey",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-rdd-map-filter",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "How many jobs, stages, and tasks does parallelize(range(1, 11), 2).map(...).filter(...).collect() run?",
+    "exercise": "count-rdd-map-filter",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
+  },
+  {
+    "id": "practice-count-json-agg-write",
+    "topic": "count-spark-work",
+    "type": "Scenario",
+    "origin": "practice",
+    "question": "A JSON aggregate is shown and then written to Parquet without caching. How many jobs run, and does the write reuse any of the show() work?",
+    "exercise": "count-json-agg-write",
+    "source": "Supplied practice question from a ChatGPT-generated study sheet; answer derived independently and observed on local PySpark 3.5.7, not reported as an interview question.",
+    "collection": "metrics-sheet"
   }
 ]

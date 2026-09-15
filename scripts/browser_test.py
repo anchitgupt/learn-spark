@@ -123,7 +123,11 @@ def wait_toast(page, text, timeout=5000):
         return False
 
 
-def run_checks(browser, base, report, slugs, pages, exercises, questions):
+def run_checks(browser, base, report, lessons, pages, exercises, questions):
+    slugs = [lesson['slug'] for lesson in lessons]
+    last = slugs[-1]
+    predict_ids = next(l for l in lessons if l['slug'] == 'predict-execution')['exercises']
+    predict = [item for item in exercises if item['id'] in predict_ids]
     check = report.check
     url = lambda name: f'{base}/{name}'
 
@@ -156,9 +160,9 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
 
     resume = page.locator('#resume-learning')
     check('resume link targets the next lesson',
-          resume.get_attribute('href') == 'predict-execution.html' and 'Continue' in resume.text_content())
+          resume.get_attribute('href') == f'{last}.html' and 'Continue' in resume.text_content())
 
-    page.goto(url('predict-execution.html'))
+    page.goto(url(f'{last}.html'))
     button = page.locator('.complete-button')
     toggle = lambda: button.get_attribute('aria-pressed')
     check('lesson starts unmarked', toggle() == 'false')
@@ -166,7 +170,7 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     check('marking a lesson updates the button and toast',
           toggle() == 'true' and wait_toast(page, 'Reading progress updated.'))
     check('marking a lesson persists to storage',
-          'predict-execution' in (storage(page) or {}).get('completed', []))
+          last in (storage(page) or {}).get('completed', []))
     page.reload()
     check('marked lesson survives a reload', page.locator('.complete-button').get_attribute('aria-pressed') == 'true')
     page.locator('.complete-button').click()
@@ -177,12 +181,12 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     # ---------- answer disclosures ----------
     report.section('Prediction disclosures')
     page.goto(url('predict-execution.html'))
-    check('three exercises are present', page.locator('section.prediction-exercise').count() == len(exercises))
-    flow_ok = all(page.locator(f"#{item['id']} .prediction-flow li").count() == len(item['flow']) for item in exercises)
+    check('three exercises are present', page.locator('section.prediction-exercise').count() == len(predict))
+    flow_ok = all(page.locator(f"#{item['id']} .prediction-flow li").count() == len(item['flow']) for item in predict)
     check('flow steps match the content', flow_ok)
     output_ok = all(
         item['output'].strip() in page.locator(f"#{item['id']} .expected p").first.text_content()
-        for item in exercises
+        for item in predict
     )
     check('expected results match the content', output_ok)
     page.locator('#filter-count details.prediction-answer > summary').click()
@@ -249,6 +253,10 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     check(f'Scenario filter shows {scenario_count} questions', visible() == scenario_count
           and page.locator('#question-count').text_content().strip() == f'{scenario_count} questions'
           and page.locator('[data-filter="Scenario"]').get_attribute('aria-pressed') == 'true')
+    for kind in sorted({q['type'] for q in questions} - {'Scenario'}):
+        kind_count = sum(1 for q in questions if q['type'] == kind)
+        page.click(f'[data-filter="{kind}"]')
+        check(f'{kind} filter shows {kind_count} questions', visible() == kind_count)
     page.click('[data-filter="All"]')
     check('All filter restores every question', visible() == len(questions))
     page.fill('#question-search', 'coalesce(1)')
@@ -297,6 +305,32 @@ def run_checks(browser, base, report, slugs, pages, exercises, questions):
     page.locator('#explain-back details.answer > summary').click()
     check('the storage explain-back disclosure opens',
           page.locator('#explain-back details.answer').evaluate('d => d.open'))
+
+    # ---------- lesson figures, runtime notes, and exercise lessons ----------
+    report.section('Lesson figures and recorded runs')
+    missing_figures, missing_runtime, exercise_errors = [], [], []
+    by_id = {item['id']: item for item in exercises}
+    for lesson in lessons:
+        if not (lesson.get('diagram') or lesson.get('runtime') or lesson.get('exercises')):
+            continue
+        page.goto(url(f"{lesson['slug']}.html"))
+        if lesson.get('diagram'):
+            image = page.locator(f"figure.architecture img[src=\"{lesson['diagram']['src']}\"]")
+            box = image.bounding_box() if image.count() == 1 else None
+            natural = image.evaluate('img => img.naturalWidth') if image.count() == 1 else 0
+            if not (box and box['width'] > 0 and natural > 0):
+                missing_figures.append(lesson['slug'])
+        if lesson.get('runtime') and lesson['runtime'] not in (page.locator('#try-it .runtime-note').text_content() or ''):
+            missing_runtime.append(lesson['slug'])
+        for exercise_id in lesson.get('exercises', []):
+            section = page.locator(f'#{exercise_id}')
+            section.locator('details.prediction-answer').evaluate('d => { d.open = true; }')
+            observed = by_id[exercise_id].get('observed')
+            if section.count() != 1 or (observed and observed.strip() not in section.locator('.expected').last.text_content()):
+                exercise_errors.append(exercise_id)
+    check('every lesson diagram loads with a rendered size', not missing_figures, ', '.join(missing_figures))
+    check('runtime-verified lessons show their recorded run', not missing_runtime, ', '.join(missing_runtime))
+    check('exercise lessons render every exercise and its observed counts', not exercise_errors, ', '.join(exercise_errors))
 
     # ---------- senior DE guide ----------
     report.section('Senior DE guide')
@@ -480,8 +514,7 @@ def main():
     lessons = json.loads((ROOT / 'content/lessons.json').read_text())
     questions = json.loads((ROOT / 'content/questions.json').read_text())
     exercises = json.loads((ROOT / 'content/predictions.json').read_text())
-    slugs = [lesson['slug'] for lesson in lessons]
-    pages = ['index.html'] + [f'{slug}.html' for slug in slugs] + ['lab.html', 'questions.html', 'notebook.html']
+    pages = ['index.html'] + [f"{lesson['slug']}.html" for lesson in lessons] + ['lab.html', 'questions.html', 'notebook.html']
 
     report = Report()
     started = time.time()
@@ -491,7 +524,7 @@ def main():
         with sync_playwright() as playwright:
             browser = launch(playwright.chromium, options.headed)
             try:
-                run_checks(browser, base, report, slugs, pages, exercises, questions)
+                run_checks(browser, base, report, lessons, pages, exercises, questions)
             except Exception as error:
                 report.failures.append(f'aborted: {error}')
                 print(f'\nABORTED: {error}')
