@@ -12,6 +12,6 @@ Verification: Examples and behavioral claims run on a local PySpark 3.5.7 runtim
 - [x] Extend the checker: Delta sources, runtime metadata, Python syntax for every lesson code block, exercise references across lessons, guide coverage.
 - [x] Review every draft against its sources and runtime logs; integrate content, retire the placeholder topic labels, reorder the guide to bank order.
 - [x] Build, check, run browser tests at phone and desktop widths, inspect screenshots, update README and verification notes.
-- [ ] Commit, push, wait for Pages, and verify live files match the local build.
+- [x] Commit, push, wait for Pages, and verify live files match the local build.
 
 Validation commands: `npm run build`, `npm run check`, `python3 scripts/browser_test.py`, `git diff --check`.

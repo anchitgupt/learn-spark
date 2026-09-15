@@ -930,3 +930,10 @@ Source lines checked at v3.5.7 (raw GitHub and the installed package):
 - axe-core 4.13.0 on the homepage, questions page, and the eight new or changed lessons: zero violations at 1280 and 390 CSS pixels with disclosures open. Diagrams, grouped navigation, observed-count blocks, the senior guide, and phone-width filters and outputs were inspected in screenshots.
 
 Publication status is recorded by the GitHub Actions deployment run; live assets are checked against the generated build after deployment.
+
+## Publication check (complete senior-bank coverage)
+
+- Implementation commit `212ebb7` pushed to `origin/main`; local and remote commit IDs matched.
+- [GitHub Pages deployment 34937919819](https://github.com/anchitgupt/learn-spark/actions/runs/34937919819) completed successfully (build and deploy jobs).
+- All 40 public build files returned HTTP 200 and matched the local build byte for byte on the first pass after deployment.
+- Live pages include https://anchitgupt.github.io/learn-spark/structured-streaming.html, https://anchitgupt.github.io/learn-spark/count-spark-work.html, and https://anchitgupt.github.io/learn-spark/questions.html
